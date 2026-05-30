@@ -1,0 +1,15 @@
+[package]
+name = "vyges-em-ir"
+version = "0.0.1"
+edition = "2021"
+description = "Vyges tools"
+
+# std-only (no external dependencies) so the core builds/tests offline.
+
+[[bin]]
+name = "vyges-em-ir"
+path = "src/main.rs"
+
+[lib]
+name = "vyges_em_ir"
+path = "src/lib.rs"
