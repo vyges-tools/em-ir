@@ -61,6 +61,7 @@ RTL→GDS flow it occupies the slot where PDNSim runs.
 ## Use it
 
 ```sh
+# prebuilt binaries: dist/<triple>/vyges-em-ir  (or build it yourself:)
 cargo build --release            # std-only, no external deps
 
 vyges-em-ir run  block.emir -o block.rpt          # analyze -> report
