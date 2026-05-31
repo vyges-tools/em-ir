@@ -87,6 +87,47 @@ fn extracts_network_with_correct_resistances() {
     assert!((spec.loads.iter().map(|(_, i)| i).sum::<f64>() - 0.004).abs() < 1e-12);
 }
 
+// A via landing in the MIDDLE of a stripe, with a single-point landing on the layer
+// below — the via-stack case the counter exposed. The stripe must split at the via
+// and the via must bridge the two layers.
+const STACK_DEF: &str = "\
+UNITS DISTANCE MICRONS 1000 ;
+SPECIALNETS 1 ;
+- VPWR
+  + USE POWER
+  + ROUTED met5 1000 ( 0 0 ) ( 0 20000 )
+    NEW met4 0 ( 0 10000 ) M45
+ ;
+END SPECIALNETS
+";
+
+#[test]
+fn splits_stripe_at_mid_segment_via_and_bridges() {
+    let mut j = job();
+    j.total_current = 0.001;
+    let spec = extract(&Def::parse(STACK_DEF).unwrap(), &TechLef::parse(LEF).unwrap(), &j).unwrap();
+    // met5 stripe (0..20um) split at the via (0,10um) -> two 10um/1um = 1 ohm wires,
+    // plus one via resistor met4<->met5 at the mid point.
+    let met5: Vec<f64> =
+        spec.resistors.iter().filter(|r| r.layer.as_deref() == Some("met5")).map(|r| r.r).collect();
+    assert_eq!(met5.len(), 2, "stripe split at the mid-segment via");
+    for r in &met5 {
+        assert!((r - 1.0).abs() < 1e-9, "each half = 1 ohm, got {r}");
+    }
+    assert_eq!(
+        spec.resistors.iter().filter(|r| r.layer.as_deref() == Some("via")).count(),
+        1,
+        "one via bridges met4<->met5 at the landing"
+    );
+    // the bridge connects the split-point met5 node and the met4 landing node
+    assert!(spec
+        .resistors
+        .iter()
+        .any(|r| r.layer.as_deref() == Some("via")
+            && [r.a.as_str(), r.b.as_str()].contains(&"met5_0_10000")
+            && [r.a.as_str(), r.b.as_str()].contains(&"met4_0_10000")));
+}
+
 #[test]
 fn solves_ir_on_extracted_grid() {
     let spec = extract(&Def::parse(DEF).unwrap(), &TechLef::parse(LEF).unwrap(), &job()).unwrap();

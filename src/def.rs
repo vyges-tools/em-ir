@@ -27,6 +27,9 @@ pub struct NetGeom {
     pub use_power: bool,
     pub segs: Vec<Seg>,
     pub vias: Vec<(i64, i64)>,
+    /// Every listed coordinate with the layer of its wire — including single-point
+    /// via-only landings (which produce no segment). Via-stack resolution needs these.
+    pub points: Vec<(String, i64, i64)>,
 }
 
 #[derive(Debug, Clone)]
@@ -148,16 +151,21 @@ fn parse_specialnets(body: &[&str]) -> Vec<NetGeom> {
                 let x = if xr == "*" { prev.0 } else { xr.parse().unwrap_or(0) };
                 let y = if yr == "*" { prev.1 } else { yr.parse().unwrap_or(0) };
                 i = next_i;
-                if let (Some(n), Some((px, py))) = (cur.as_mut(), last) {
-                    if px != x || py != y {
-                        n.segs.push(Seg {
-                            layer: layer.clone(),
-                            width_dbu: width,
-                            x1: px,
-                            y1: py,
-                            x2: x,
-                            y2: y,
-                        });
+                if let Some(n) = cur.as_mut() {
+                    if !layer.is_empty() {
+                        n.points.push((layer.clone(), x, y));
+                    }
+                    if let Some((px, py)) = last {
+                        if px != x || py != y {
+                            n.segs.push(Seg {
+                                layer: layer.clone(),
+                                width_dbu: width,
+                                x1: px,
+                                y1: py,
+                                x2: x,
+                                y2: y,
+                            });
+                        }
                     }
                 }
                 last = Some((x, y));

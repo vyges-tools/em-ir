@@ -141,16 +141,20 @@ to the switching instant. Fully offline, no external deps, 12 tests green.
 Adds **PDN extraction from DEF/LEF**: a `def` (special-net power grid) + tech `lef`
 (per-layer `RESISTANCE RPERSQ`) build the resistor network instead of a hand-written
 `.pdn`. Each special-net wire segment becomes `R = rpersq · L/W`, nodes key on
-`(layer, x, y)`, vias bridge co-located layers, the `pad_layer` nodes are tied to the
-supply, and the static current spreads over the rest. Validated exactly on a
-synthetic stripe grid (hand-checked 1 Ω stripes, 1 mV droop) and **parses a real
-sky130 routed DEF + tech LEF** (units, special nets, vias, `PIN` connection refs,
-real layer resistances). v1 covers **regular stripe grids**; a real PDN that
-expresses vias as single-point via-only statements (and FOLLOWPIN rails) needs full
-**via-stack connectivity resolution** to solve — the next extraction step.
+`(layer, x, y)`, and the `pad_layer` nodes are tied to the supply. **Via stacks are
+resolved**: each wire is split at any via landing on it (so a via that lands
+mid-stripe gets a node), single-point via-only landings are kept as nodes, and at
+each via location the **adjacent metal layers present** are connected in stack order
+(met1-via-met2-via2-…) — so a met1 rail → via stack → met5 strap path is continuous.
 
-The road to sign-off grade builds on the same network model: via-stack resolution
-+ per-instance loads from DEF COMPONENTS (with char switching energy → dynamic IR on
-a real layout), real EM as current-density × wire geometry, a faster solver
-(warm-started / CG / multigrid for large grids), and electrothermal coupling (the
-BCD/power axis — the engine reserves the `EmIrError::ElectrothermalNotModeled` hook).
+Validated exactly on a synthetic stripe grid (hand-checked 1 Ω stripes, 1 mV droop,
+mid-segment via split) and **on a real sky130 routed DEF + tech LEF** (the m0
+counter): extracts a 53-node grid and solves to a **worst IR drop of 1.92 % on a
+met1 rail** (the lowest layer, where cells draw current, reached up through the via
+stack to the met5 supply) — the physically expected hotspot.
+
+The road to sign-off grade builds on the same network model: per-instance loads from
+DEF COMPONENTS (with char switching energy → dynamic IR on a real layout), real EM
+as current-density × wire geometry, a faster solver (warm-started / CG / multigrid
+for large grids), and electrothermal coupling (the BCD/power axis — the engine
+reserves the `EmIrError::ElectrothermalNotModeled` hook).
