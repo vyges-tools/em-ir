@@ -153,8 +153,17 @@ counter): extracts a 53-node grid and solves to a **worst IR drop of 1.92 % on a
 met1 rail** (the lowest layer, where cells draw current, reached up through the via
 stack to the met5 supply) — the physically expected hotspot.
 
-The road to sign-off grade builds on the same network model: per-instance loads from
-DEF COMPONENTS (with char switching energy → dynamic IR on a real layout), real EM
-as current-density × wire geometry, a faster solver (warm-started / CG / multigrid
-for large grids), and electrothermal coupling (the BCD/power axis — the engine
-reserves the `EmIrError::ElectrothermalNotModeled` hook).
+**The full char → em-ir seam on silicon.** With a `power_map` (cell → per-switch
+energy, from `vyges-char`) the engine reads the DEF `COMPONENTS` placements, looks up
+each instance's cell energy, and lands its current on the nearest supply-rail node:
+a static average `(energy/vdd)·f·activity` *and* a switch event (same energy) for the
+transient solve. So per-instance dynamic power flows from the characterizer onto the
+real extracted grid. Demonstrated on the sky130 m0 counter (char-derived energies, 53
+extracted nodes): static IR 0.11 % but a **worst-case-simultaneous dynamic droop of
+19 % on a met1 rail** — the ~180× gap dynamic IR exists to catch — falling to 7.9 %
+as node decap is added (the counter's `decap` cells, an extraction follow-up).
+
+The road to sign-off grade builds on the same network model: decap extraction from
+`decap` cells, real EM as current-density × wire geometry, a faster solver
+(warm-started / CG / multigrid for large grids), and electrothermal coupling (the
+BCD/power axis — the engine reserves the `EmIrError::ElectrothermalNotModeled` hook).

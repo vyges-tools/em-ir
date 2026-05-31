@@ -32,10 +32,20 @@ pub struct NetGeom {
     pub points: Vec<(String, i64, i64)>,
 }
 
+/// A placed instance from the DEF COMPONENTS section.
+#[derive(Debug, Clone)]
+pub struct Comp {
+    pub name: String,
+    pub cell: String,
+    pub x: i64,
+    pub y: i64,
+}
+
 #[derive(Debug, Clone)]
 pub struct Def {
     pub dbu: f64, // database units per micron
     pub nets: Vec<NetGeom>,
+    pub comps: Vec<Comp>, // placed instances (for per-instance current loads)
 }
 
 #[derive(Debug)]
@@ -82,13 +92,57 @@ impl Def {
         if nets.is_empty() {
             return Err(DefError("no special nets parsed".into()));
         }
-        Ok(Def { dbu, nets })
+        let comps = parse_components(&toks);
+        Ok(Def { dbu, nets, comps })
     }
 
     pub fn load(path: &str) -> Result<Def, DefError> {
         let text = std::fs::read_to_string(path).map_err(|e| DefError(format!("{path}: {e}")))?;
         Def::parse(&text)
     }
+}
+
+/// Parse the COMPONENTS section into placed instances. Each entry is
+/// `- <name> <cell> … PLACED|FIXED ( x y ) <orient> ;`.
+fn parse_components(toks: &[&str]) -> Vec<Comp> {
+    let Some(s) = toks.iter().position(|&t| t == "COMPONENTS") else {
+        return Vec::new();
+    };
+    let end = (s..toks.len())
+        .find(|&i| toks[i] == "END" && toks.get(i + 1) == Some(&"COMPONENTS"))
+        .unwrap_or(toks.len());
+    let body = &toks[s + 1..end];
+    let mut comps = Vec::new();
+    let mut i = 0;
+    while i < body.len() {
+        if body[i] == "-" {
+            let name = body.get(i + 1).copied().unwrap_or("").to_string();
+            let cell = body.get(i + 2).copied().unwrap_or("").to_string();
+            // scan to PLACED/FIXED ( x y ) before the statement's ';'
+            let mut j = i + 3;
+            let mut xy = None;
+            while j < body.len() && body[j] != ";" {
+                if (body[j] == "PLACED" || body[j] == "FIXED") && body.get(j + 1) == Some(&"(") {
+                    let x = body.get(j + 2).and_then(|t| t.parse().ok());
+                    let y = body.get(j + 3).and_then(|t| t.parse().ok());
+                    if let (Some(x), Some(y)) = (x, y) {
+                        xy = Some((x, y));
+                    }
+                    break;
+                }
+                j += 1;
+            }
+            if let Some((x, y)) = xy {
+                if !name.is_empty() && !cell.is_empty() {
+                    comps.push(Comp { name, cell, x, y });
+                }
+            }
+            i += 3;
+        } else {
+            i += 1;
+        }
+    }
+    comps
 }
 
 /// Walk the SPECIALNETS token stream into per-net geometry.

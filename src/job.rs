@@ -24,6 +24,16 @@ pub struct EmIrJob {
     pub pad_layer: String,  // metal layer whose nodes are tied to the pads (e.g. top metal)
     pub via_res: f64,       // per-via resistance (ohms) bridging layers at a via point
     pub total_current: f64, // total static current (A), spread over the load-layer nodes
+    // The char -> em-ir seam on a real layout: per-instance current from DEF
+    // COMPONENTS + a char-derived cell -> switching-energy map. Each instance's
+    // current lands on the nearest grid node; the same energy drives a switch event
+    // for dynamic IR. `power_map` empty -> fall back to `total_current` / `.pdn`.
+    pub power_map: String,  // cell -> switching energy (pJ) [+ leakage nW], from char
+    pub clock_ghz: f64,     // switching frequency (GHz) for the average current
+    pub activity: f64,      // switching activity factor (0..1)
+    pub switch_t_ns: f64,   // dynamic: the (worst-case simultaneous) switch time
+    pub switch_dur_ns: f64, // dynamic: per-switch transition duration
+    pub node_cap_pf: f64,   // optional uniform decap per load node (pF)
     pub base_dir: String,
 }
 
@@ -67,6 +77,12 @@ impl EmIrJob {
             pad_layer: kv.get("pad_layer").cloned().unwrap_or_default(),
             via_res: kv.get("via_res").and_then(|s| s.parse().ok()).unwrap_or(5.0),
             total_current: kv.get("total_current").and_then(|s| s.parse().ok()).unwrap_or(0.0),
+            power_map: kv.get("power_map").cloned().unwrap_or_default(),
+            clock_ghz: kv.get("clock_ghz").and_then(|s| s.parse().ok()).unwrap_or(1.0),
+            activity: kv.get("activity").and_then(|s| s.parse().ok()).unwrap_or(0.2),
+            switch_t_ns: kv.get("switch_t_ns").and_then(|s| s.parse().ok()).unwrap_or(1.0),
+            switch_dur_ns: kv.get("switch_dur_ns").and_then(|s| s.parse().ok()).unwrap_or(0.1),
+            node_cap_pf: kv.get("node_cap_pf").and_then(|s| s.parse().ok()).unwrap_or(0.0),
             def,
             base_dir: base_dir.to_string(),
         };

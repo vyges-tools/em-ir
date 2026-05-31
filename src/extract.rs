@@ -22,7 +22,25 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::def::Def;
 use crate::job::EmIrJob;
 use crate::lef::TechLef;
-use crate::pdn::{PdnSpec, Resistor};
+use crate::pdn::{PdnSpec, Resistor, Switch};
+
+/// Parse a char-derived `cell <energy_pJ> [leakage_nW]` power map.
+fn parse_power_map(text: &str) -> BTreeMap<String, f64> {
+    let mut m = BTreeMap::new();
+    for line in text.lines() {
+        let l = line.split('#').next().unwrap_or("").trim();
+        if l.is_empty() {
+            continue;
+        }
+        let mut it = l.split_whitespace();
+        if let (Some(cell), Some(e)) = (it.next(), it.next()) {
+            if let Ok(v) = e.parse::<f64>() {
+                m.insert(cell.to_string(), v);
+            }
+        }
+    }
+    m
+}
 
 fn node(layer: &str, x: i64, y: i64) -> String {
     format!("{layer}_{x}_{y}")
@@ -141,20 +159,67 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
         return Err(format!("pad_layer {:?} has no nodes in the DEF power grid", job.pad_layer));
     }
 
-    // loads: spread the total static current uniformly over the non-pad nodes.
-    let mut load_nodes: BTreeSet<String> = BTreeSet::new();
+    // load nodes = the lowest non-pad metal layer (where cells tap the supply rails).
+    let lowest = at_point
+        .values()
+        .flatten()
+        .filter(|l| *l != &job.pad_layer)
+        .map(|l| metal_index(l))
+        .min();
+    let mut lnodes: Vec<(String, i64, i64)> = Vec::new();
     for ((x, y), layers) in &at_point {
         for l in layers {
-            if l != &job.pad_layer {
-                load_nodes.insert(node(l, *x, *y));
+            if l != &job.pad_layer && Some(metal_index(l)) == lowest {
+                lnodes.push((node(l, *x, *y), *x, *y));
             }
         }
     }
+
     let mut loads: Vec<(String, f64)> = Vec::new();
-    if job.total_current > 0.0 && !load_nodes.is_empty() {
-        let per = job.total_current / load_nodes.len() as f64;
-        loads = load_nodes.into_iter().map(|n| (n, per)).collect();
+    let mut switches: Vec<Switch> = Vec::new();
+    let mut caps: Vec<(String, f64)> = Vec::new();
+
+    if !job.power_map.is_empty() && !def.comps.is_empty() && !lnodes.is_empty() {
+        // The seam on silicon: each instance's current = its cell's char switching
+        // energy, landed on the nearest rail node; the same energy drives a switch
+        // event for dynamic IR. Static avg current = (energy/vdd) · f · activity.
+        let text = std::fs::read_to_string(job.resolve(&job.power_map)).map_err(|e| e.to_string())?;
+        let pmap = parse_power_map(&text);
+        let f = job.clock_ghz * 1e9;
+        let mut sload: BTreeMap<String, f64> = BTreeMap::new();
+        let mut senergy: BTreeMap<String, f64> = BTreeMap::new();
+        for c in &def.comps {
+            let e = match pmap.get(&c.cell) {
+                Some(&e) if e > 0.0 => e,
+                _ => continue, // fillers/decaps/taps and uncharacterized cells: no current
+            };
+            let nn = lnodes
+                .iter()
+                .min_by_key(|(_, x, y)| (x - c.x) * (x - c.x) + (y - c.y) * (y - c.y));
+            if let Some((name, _, _)) = nn {
+                let q = e * 1e-12 / job.vdd; // Coulombs per switch
+                *sload.entry(name.clone()).or_default() += q * f * job.activity;
+                *senergy.entry(name.clone()).or_default() += e;
+            }
+        }
+        loads = sload.into_iter().collect();
+        switches = senergy
+            .into_iter()
+            .map(|(node, energy_pj)| Switch {
+                node,
+                energy_pj,
+                t50_ns: job.switch_t_ns,
+                dur_ns: job.switch_dur_ns,
+            })
+            .collect();
+        if job.node_cap_pf > 0.0 {
+            caps = lnodes.iter().map(|(n, _, _)| (n.clone(), job.node_cap_pf)).collect();
+        }
+    } else if job.total_current > 0.0 && !lnodes.is_empty() {
+        // uniform fallback: spread the total current over the rail nodes.
+        let per = job.total_current / lnodes.len() as f64;
+        loads = lnodes.iter().map(|(n, _, _)| (n.clone(), per)).collect();
     }
 
-    Ok(PdnSpec { vdd: job.vdd, pads, resistors, loads, ..Default::default() })
+    Ok(PdnSpec { vdd: job.vdd, pads, resistors, loads, switches, caps, ..Default::default() })
 }

@@ -48,6 +48,12 @@ fn job() -> EmIrJob {
         pad_layer: "met5".into(),
         via_res: 1.0,
         total_current: 0.004, // 4 mA over the 4 met4 nodes -> 1 mA each
+        power_map: String::new(),
+        clock_ghz: 1.0,
+        activity: 0.2,
+        switch_t_ns: 1.0,
+        switch_dur_ns: 0.1,
+        node_cap_pf: 0.0,
         base_dir: String::new(),
     }
 }
@@ -100,6 +106,22 @@ SPECIALNETS 1 ;
  ;
 END SPECIALNETS
 ";
+
+#[test]
+fn parses_components_placements() {
+    let def_with_comps = format!(
+        "COMPONENTS 2 ;\n\
+         - g1 sky130_fd_sc_hd__inv_2 + PLACED ( 5000 6000 ) N ;\n\
+         - FILLER_0 sky130_fd_sc_hd__fill_1 + SOURCE DIST + PLACED ( 100 200 ) FS ;\n\
+         END COMPONENTS\n{DEF}"
+    );
+    let def = Def::parse(&def_with_comps).unwrap();
+    assert_eq!(def.comps.len(), 2);
+    assert_eq!(def.comps[0].name, "g1");
+    assert_eq!(def.comps[0].cell, "sky130_fd_sc_hd__inv_2");
+    assert_eq!((def.comps[0].x, def.comps[0].y), (5000, 6000));
+    assert_eq!(def.comps[1].cell, "sky130_fd_sc_hd__fill_1");
+}
 
 #[test]
 fn splits_stripe_at_mid_segment_via_and_bridges() {
