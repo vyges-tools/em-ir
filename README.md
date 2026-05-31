@@ -138,8 +138,19 @@ power-integrity. Demonstrated end-to-end on a small block using the measured sky
 `inv_1` energy (~0.0151 pJ/switch): dynamic droop 0.07% vs static 0.05%, resolved
 to the switching instant. Fully offline, no external deps, 12 tests green.
 
-The road to sign-off grade builds on the same network model: **PDN extraction from
-DEF/LEF geometry** (today the PDN is described directly), real EM as
-current-density × wire geometry, a faster solver (warm-started / CG / multigrid for
-large grids), and electrothermal coupling (the BCD/power axis — the engine reserves
-the `EmIrError::ElectrothermalNotModeled` hook).
+Adds **PDN extraction from DEF/LEF**: a `def` (special-net power grid) + tech `lef`
+(per-layer `RESISTANCE RPERSQ`) build the resistor network instead of a hand-written
+`.pdn`. Each special-net wire segment becomes `R = rpersq · L/W`, nodes key on
+`(layer, x, y)`, vias bridge co-located layers, the `pad_layer` nodes are tied to the
+supply, and the static current spreads over the rest. Validated exactly on a
+synthetic stripe grid (hand-checked 1 Ω stripes, 1 mV droop) and **parses a real
+sky130 routed DEF + tech LEF** (units, special nets, vias, `PIN` connection refs,
+real layer resistances). v1 covers **regular stripe grids**; a real PDN that
+expresses vias as single-point via-only statements (and FOLLOWPIN rails) needs full
+**via-stack connectivity resolution** to solve — the next extraction step.
+
+The road to sign-off grade builds on the same network model: via-stack resolution
++ per-instance loads from DEF COMPONENTS (with char switching energy → dynamic IR on
+a real layout), real EM as current-density × wire geometry, a faster solver
+(warm-started / CG / multigrid for large grids), and electrothermal coupling (the
+BCD/power axis — the engine reserves the `EmIrError::ElectrothermalNotModeled` hook).

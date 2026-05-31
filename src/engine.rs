@@ -20,7 +20,16 @@ emlimit met4 0.3
 ";
 
 pub fn analyze_job(job: &EmIrJob) -> Result<EmIrReport, EmIrError> {
-    let spec = PdnSpec::load(&job.resolve(&job.pdn)).map_err(|e| EmIrError::Parse(e.to_string()))?;
+    let spec = if !job.def.is_empty() {
+        // extract the PDN network from DEF power-grid geometry + LEF resistances
+        let def = crate::def::Def::load(&job.resolve(&job.def))
+            .map_err(|e| EmIrError::Parse(e.to_string()))?;
+        let lef = crate::lef::TechLef::load(&job.resolve(&job.lef))
+            .map_err(|e| EmIrError::Parse(e.to_string()))?;
+        crate::extract::extract(&def, &lef, job).map_err(EmIrError::Parse)?
+    } else {
+        PdnSpec::load(&job.resolve(&job.pdn)).map_err(|e| EmIrError::Parse(e.to_string()))?
+    };
     emir::analyze(&spec)
 }
 
@@ -30,6 +39,12 @@ pub fn demo() -> (EmIrJob, EmIrReport) {
         design: "demo".into(),
         pdn: "(builtin)".into(),
         ir_limit_pct: 5.0,
+        def: String::new(),
+        lef: String::new(),
+        vdd: 1.8,
+        pad_layer: String::new(),
+        via_res: 5.0,
+        total_current: 0.0,
         base_dir: String::new(),
     };
     let spec = PdnSpec::parse(DEMO_PDN).expect("builtin pdn parses");

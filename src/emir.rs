@@ -151,7 +151,7 @@ pub fn analyze(spec: &PdnSpec) -> Result<EmIrReport, EmIrError> {
     sys.diag.clone_from(&base_diag);
     sys.offdiag.clone_from(&offdiag);
     sys.rhs = pad_rhs.iter().zip(&dc).map(|(p, d)| p - d).collect();
-    let x = sys.solve(20_000, 1e-10).map_err(|e| EmIrError::Solver(e.to_string()))?;
+    let x = sys.solve(50_000, 1e-8).map_err(|e| EmIrError::Solver(e.to_string()))?;
 
     let voltage = |n: &str| -> f64 {
         if let Some(&v) = pad_v.get(n) {
@@ -269,7 +269,7 @@ fn transient(
                 sys.rhs[k] -= switch_current(sw, t_ns, spec.vdd);
             }
         }
-        let v = sys.solve(20_000, 1e-10).map_err(|e| EmIrError::Solver(e.to_string()))?;
+        let v = sys.solve(50_000, 1e-8).map_err(|e| EmIrError::Solver(e.to_string()))?;
         for k in 0..n {
             if v[k] < vmin[k] {
                 vmin[k] = v[k];

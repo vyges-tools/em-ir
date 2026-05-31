@@ -19,10 +19,13 @@
 //! axis) build on the same network model; the engine reserves the
 //! `EmIrError::ElectrothermalNotModeled` hook.
 
-pub mod job;
-pub mod pdn;
-pub mod solver;
+pub mod def;
 pub mod emir;
 pub mod engine;
+pub mod extract;
+pub mod job;
+pub mod lef;
+pub mod pdn;
+pub mod solver;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
