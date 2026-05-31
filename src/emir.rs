@@ -178,7 +178,11 @@ pub fn analyze(spec: &PdnSpec) -> Result<EmIrReport, EmIrError> {
     let mut em_worst_ratio = 0.0f64;
     for r in &spec.resistors {
         let Some(layer) = &r.layer else { continue };
-        let Some(&limit) = spec.em_limits.get(layer) else { continue };
+        // per-segment EM limit (width × LEF current-density) wins; else the PDN's
+        // flat per-layer `emlimit`. A segment with neither is not checked.
+        let Some(limit) = r.em_limit.or_else(|| spec.em_limits.get(layer).copied()) else {
+            continue;
+        };
         em_checked += 1;
         let current = (voltage(&r.a) - voltage(&r.b)).abs() / r.r;
         let ratio = current / limit;

@@ -35,6 +35,9 @@ pub struct Resistor {
     pub b: String,
     pub r: f64,
     pub layer: Option<String>,
+    /// Per-segment EM current limit (A) — from a LEF current-density × this wire's
+    /// width. `None` falls back to the PDN's flat per-layer `emlimit`.
+    pub em_limit: Option<f64>,
 }
 
 /// A switching-current event at a node: the rail delivers `energy_pj`/vdd of charge
@@ -124,6 +127,7 @@ impl PdnSpec {
                         b: b.to_string(),
                         r,
                         layer,
+                        em_limit: None, // .pdn uses the flat per-layer `emlimit`
                     });
                 }
                 "load" => {

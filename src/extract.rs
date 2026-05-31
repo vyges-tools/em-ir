@@ -104,6 +104,9 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
         if w_um <= 0.0 {
             return Err(format!("segment on {:?} has no width (DEF or LEF)", s.layer));
         }
+        // EM limit (A) for this wire = DC current-density (mA/um) × its width (um).
+        let jmax = lr.map(|l| l.dc_jmax).unwrap_or(0.0);
+        let em_limit = if jmax > 0.0 { Some(jmax * w_um * 1e-3) } else { None };
         // collect split points (via locations on this segment), ordered along it.
         let mut cuts: Vec<(i64, i64)> = via_locs
             .iter()
@@ -130,6 +133,7 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
                 b: node(&s.layer, bx, by),
                 r: rpersq * len_um / w_um,
                 layer: Some(s.layer.clone()),
+                em_limit,
             });
         }
     }
@@ -149,6 +153,7 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
                 b: node(w[1], x, y),
                 r: job.via_res,
                 layer: Some("via".to_string()),
+                em_limit: None, // via EM (per-cut) is a follow-up
             });
         }
     }

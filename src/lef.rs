@@ -19,6 +19,7 @@ use std::collections::BTreeMap;
 pub struct LayerR {
     pub rpersq: f64,    // sheet resistance (ohm/square)
     pub width_um: f64,  // default routing width (microns); 0 if unspecified
+    pub dc_jmax: f64,   // DC average current-density limit (mA/um); 0 if unspecified
 }
 
 #[derive(Debug, Clone, Default)]
@@ -60,6 +61,10 @@ impl TechLef {
                             l.rpersq = toks[2].trim_end_matches(';').parse().unwrap_or(l.rpersq);
                         } else if toks.len() >= 2 && toks[0] == "WIDTH" {
                             l.width_um = toks[1].trim_end_matches(';').parse().unwrap_or(l.width_um);
+                        } else if toks.len() >= 3 && toks[0] == "DCCURRENTDENSITY" && toks[1] == "AVERAGE" {
+                            // scalar form `DCCURRENTDENSITY AVERAGE <mA/um> ;`; a table form
+                            // (next-line WIDTH/TABLEENTRIES) leaves toks[2] non-numeric -> skip.
+                            l.dc_jmax = toks[2].trim_end_matches(';').parse().unwrap_or(l.dc_jmax);
                         }
                     }
                 }
