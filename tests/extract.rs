@@ -49,6 +49,7 @@ fn job() -> EmIrJob {
         via_res: 1.0,
         total_current: 0.004, // 4 mA over the 4 met4 nodes -> 1 mA each
         power_map: String::new(),
+        decap_map: String::new(),
         clock_ghz: 1.0,
         activity: 0.2,
         switch_t_ns: 1.0,

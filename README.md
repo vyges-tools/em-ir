@@ -160,10 +160,16 @@ a static average `(energy/vdd)·f·activity` *and* a switch event (same energy) 
 transient solve. So per-instance dynamic power flows from the characterizer onto the
 real extracted grid. Demonstrated on the sky130 m0 counter (char-derived energies, 53
 extracted nodes): static IR 0.11 % but a **worst-case-simultaneous dynamic droop of
-19 % on a met1 rail** — the ~180× gap dynamic IR exists to catch — falling to 7.9 %
-as node decap is added (the counter's `decap` cells, an extraction follow-up).
+19 % on a met1 rail** — the ~180× gap dynamic IR exists to catch.
 
-The road to sign-off grade builds on the same network model: decap extraction from
-`decap` cells, real EM as current-density × wire geometry, a faster solver
-(warm-started / CG / multigrid for large grids), and electrothermal coupling (the
-BCD/power axis — the engine reserves the `EmIrError::ElectrothermalNotModeled` hook).
+**Decap extraction.** A `decap_map` (decap cell → capacitance, pF) lands each placed
+decoupling cell's capacitance on its nearest supply-rail node, so the real on-chip
+decoupling participates in the transient solve (no uniform-cap guess). On the counter
+the 30 placed `decap_3` cells lower the dynamic droop (19.0 % → 17.4 % at 10 fF each;
+the magnitude scales with the real per-cell value), leaving the DC IR unchanged — as
+decoupling capacitance should.
+
+The road to sign-off grade builds on the same network model: real EM as
+current-density × wire geometry, a faster solver (warm-started / CG / multigrid for
+large grids), and electrothermal coupling (the BCD/power axis — the engine reserves
+the `EmIrError::ElectrothermalNotModeled` hook).

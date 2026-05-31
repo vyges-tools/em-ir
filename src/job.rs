@@ -29,6 +29,7 @@ pub struct EmIrJob {
     // current lands on the nearest grid node; the same energy drives a switch event
     // for dynamic IR. `power_map` empty -> fall back to `total_current` / `.pdn`.
     pub power_map: String,  // cell -> switching energy (pJ) [+ leakage nW], from char
+    pub decap_map: String,  // decap cell -> capacitance (pF); placed decap from the DEF
     pub clock_ghz: f64,     // switching frequency (GHz) for the average current
     pub activity: f64,      // switching activity factor (0..1)
     pub switch_t_ns: f64,   // dynamic: the (worst-case simultaneous) switch time
@@ -78,6 +79,7 @@ impl EmIrJob {
             via_res: kv.get("via_res").and_then(|s| s.parse().ok()).unwrap_or(5.0),
             total_current: kv.get("total_current").and_then(|s| s.parse().ok()).unwrap_or(0.0),
             power_map: kv.get("power_map").cloned().unwrap_or_default(),
+            decap_map: kv.get("decap_map").cloned().unwrap_or_default(),
             clock_ghz: kv.get("clock_ghz").and_then(|s| s.parse().ok()).unwrap_or(1.0),
             activity: kv.get("activity").and_then(|s| s.parse().ok()).unwrap_or(0.2),
             switch_t_ns: kv.get("switch_t_ns").and_then(|s| s.parse().ok()).unwrap_or(1.0),

@@ -46,6 +46,7 @@ pub fn demo() -> (EmIrJob, EmIrReport) {
         via_res: 5.0,
         total_current: 0.0,
         power_map: String::new(),
+        decap_map: String::new(),
         clock_ghz: 1.0,
         activity: 0.2,
         switch_t_ns: 1.0,

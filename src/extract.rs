@@ -24,7 +24,16 @@ use crate::job::EmIrJob;
 use crate::lef::TechLef;
 use crate::pdn::{PdnSpec, Resistor, Switch};
 
-/// Parse a char-derived `cell <energy_pJ> [leakage_nW]` power map.
+/// Read a `cell <value> …` map file (resolved against the job dir); empty path -> {}.
+fn read_map(job: &EmIrJob, rel: &str) -> Result<BTreeMap<String, f64>, String> {
+    if rel.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let text = std::fs::read_to_string(job.resolve(rel)).map_err(|e| e.to_string())?;
+    Ok(parse_power_map(&text))
+}
+
+/// Parse a `cell <value> [extra…]` map (char switching energy pJ, or decap pF).
 fn parse_power_map(text: &str) -> BTreeMap<String, f64> {
     let mut m = BTreeMap::new();
     for line in text.lines() {
@@ -179,27 +188,46 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
     let mut switches: Vec<Switch> = Vec::new();
     let mut caps: Vec<(String, f64)> = Vec::new();
 
-    if !job.power_map.is_empty() && !def.comps.is_empty() && !lnodes.is_empty() {
+    let nearest = |cx: i64, cy: i64| -> Option<&String> {
+        lnodes
+            .iter()
+            .min_by_key(|(_, x, y)| (x - cx) * (x - cx) + (y - cy) * (y - cy))
+            .map(|(n, _, _)| n)
+    };
+
+    if (!job.power_map.is_empty() || !job.decap_map.is_empty())
+        && !def.comps.is_empty()
+        && !lnodes.is_empty()
+    {
         // The seam on silicon: each instance's current = its cell's char switching
         // energy, landed on the nearest rail node; the same energy drives a switch
         // event for dynamic IR. Static avg current = (energy/vdd) · f · activity.
-        let text = std::fs::read_to_string(job.resolve(&job.power_map)).map_err(|e| e.to_string())?;
-        let pmap = parse_power_map(&text);
+        // Decap cells contribute their capacitance at the nearest rail node — the
+        // real placed decoupling that smooths the dynamic droop.
+        let pmap = read_map(job, &job.power_map)?;
+        let dmap = read_map(job, &job.decap_map)?;
         let f = job.clock_ghz * 1e9;
         let mut sload: BTreeMap<String, f64> = BTreeMap::new();
         let mut senergy: BTreeMap<String, f64> = BTreeMap::new();
+        let mut dcap: BTreeMap<String, f64> = BTreeMap::new();
         for c in &def.comps {
-            let e = match pmap.get(&c.cell) {
-                Some(&e) if e > 0.0 => e,
-                _ => continue, // fillers/decaps/taps and uncharacterized cells: no current
-            };
-            let nn = lnodes
-                .iter()
-                .min_by_key(|(_, x, y)| (x - c.x) * (x - c.x) + (y - c.y) * (y - c.y));
-            if let Some((name, _, _)) = nn {
-                let q = e * 1e-12 / job.vdd; // Coulombs per switch
-                *sload.entry(name.clone()).or_default() += q * f * job.activity;
-                *senergy.entry(name.clone()).or_default() += e;
+            // switching current from char energy
+            if let Some(&e) = pmap.get(&c.cell) {
+                if e > 0.0 {
+                    if let Some(name) = nearest(c.x, c.y) {
+                        let q = e * 1e-12 / job.vdd; // Coulombs per switch
+                        *sload.entry(name.clone()).or_default() += q * f * job.activity;
+                        *senergy.entry(name.clone()).or_default() += e;
+                    }
+                }
+            }
+            // placed decoupling capacitance from decap cells
+            if let Some(&cf) = dmap.get(&c.cell) {
+                if cf > 0.0 {
+                    if let Some(name) = nearest(c.x, c.y) {
+                        *dcap.entry(name.clone()).or_default() += cf;
+                    }
+                }
             }
         }
         loads = sload.into_iter().collect();
@@ -212,9 +240,13 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
                 dur_ns: job.switch_dur_ns,
             })
             .collect();
+        // a uniform node_cap_pf (if set) tops up every rail node on top of placed decap.
         if job.node_cap_pf > 0.0 {
-            caps = lnodes.iter().map(|(n, _, _)| (n.clone(), job.node_cap_pf)).collect();
+            for (n, _, _) in &lnodes {
+                *dcap.entry(n.clone()).or_default() += job.node_cap_pf;
+            }
         }
+        caps = dcap.into_iter().collect();
     } else if job.total_current > 0.0 && !lnodes.is_empty() {
         // uniform fallback: spread the total current over the rail nodes.
         let per = job.total_current / lnodes.len() as f64;
