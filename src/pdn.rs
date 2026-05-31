@@ -35,9 +35,13 @@ pub struct Resistor {
     pub b: String,
     pub r: f64,
     pub layer: Option<String>,
-    /// Per-segment EM current limit (A) — from a LEF current-density × this wire's
-    /// width. `None` falls back to the PDN's flat per-layer `emlimit`.
+    /// Per-segment EM current limits (A) — from LEF current-densities × this wire's
+    /// width. `em_limit` is the DC-average (Iavg) limit (`None` falls back to the
+    /// PDN's flat per-layer `emlimit`); `em_rms_limit`/`em_peak_limit` are the AC
+    /// RMS/peak limits checked against the transient current waveform.
     pub em_limit: Option<f64>,
+    pub em_rms_limit: Option<f64>,
+    pub em_peak_limit: Option<f64>,
 }
 
 /// A switching-current event at a node: the rail delivers `energy_pj`/vdd of charge
@@ -128,6 +132,8 @@ impl PdnSpec {
                         r,
                         layer,
                         em_limit: None, // .pdn uses the flat per-layer `emlimit`
+                        em_rms_limit: None,
+                        em_peak_limit: None,
                     });
                 }
                 "load" => {

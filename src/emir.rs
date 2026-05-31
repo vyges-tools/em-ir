@@ -43,6 +43,7 @@ pub struct IrNode {
 
 #[derive(Debug, Clone)]
 pub struct EmViolation {
+    pub kind: String, // "dc" (Iavg), "rms" (Irms), or "peak" (Ipeak)
     pub a: String,
     pub b: String,
     pub layer: String,
@@ -191,6 +192,7 @@ pub fn analyze(spec: &PdnSpec) -> Result<EmIrReport, EmIrError> {
         }
         if ratio > 1.0 {
             em_violations.push(EmViolation {
+                kind: "dc".into(),
                 a: r.a.clone(),
                 b: r.b.clone(),
                 layer: layer.clone(),
@@ -201,9 +203,37 @@ pub fn analyze(spec: &PdnSpec) -> Result<EmIrReport, EmIrError> {
         }
     }
 
-    // Dynamic (transient) IR when the PDN carries switching events.
+    // Dynamic (transient) IR when the PDN carries switching events. The transient
+    // also returns each segment's RMS and peak current, checked against the LEF AC
+    // current-density limits — the EM the DC-average check can't see.
     let dynamic = if spec.is_dynamic() && n > 0 {
-        Some(transient(spec, &free_idx, &free_names, &base_diag, &offdiag, &pad_rhs, &cap, &dc, &x)?)
+        let tr = transient(spec, &free_idx, &free_names, &base_diag, &offdiag, &pad_rhs, &cap, &dc, &x)?;
+        for (ri, r) in spec.resistors.iter().enumerate() {
+            let Some(layer) = &r.layer else { continue };
+            for (kind, cur, lim) in [
+                ("rms", tr.rms[ri], r.em_rms_limit),
+                ("peak", tr.peak[ri], r.em_peak_limit),
+            ] {
+                let Some(limit) = lim else { continue };
+                em_checked += 1;
+                let ratio = cur / limit;
+                if ratio > em_worst_ratio {
+                    em_worst_ratio = ratio;
+                }
+                if ratio > 1.0 {
+                    em_violations.push(EmViolation {
+                        kind: kind.into(),
+                        a: r.a.clone(),
+                        b: r.b.clone(),
+                        layer: layer.clone(),
+                        current: cur,
+                        limit,
+                        ratio,
+                    });
+                }
+            }
+        }
+        Some(tr.dyn_ir)
     } else {
         None
     };
@@ -232,11 +262,20 @@ fn switch_current(sw: &Switch, t_ns: f64, vdd: f64) -> f64 {
     ipk * (1.0 - d.abs() / half)
 }
 
+/// Result of the transient solve: the worst droop, plus each resistor's RMS and
+/// peak current over the window (for AC EM), indexed by `spec.resistors`.
+struct TransientResult {
+    dyn_ir: DynIr,
+    rms: Vec<f64>,
+    peak: Vec<f64>,
+}
+
 /// Backward-Euler transient solve over the switching window. Each timestep is a
 /// conductance solve with `C/dt` added to the diagonal and `i(t)` + `(C/dt)·v_prev`
-/// in the rhs; tracks the deepest droop reached at any node. The capacitance smooths
-/// the response, but the instantaneous current peaks make the dynamic droop worse
-/// than the static IR — which is the point of the analysis.
+/// in the rhs; tracks the deepest droop reached at any node and accumulates each
+/// segment's RMS and peak current. The capacitance smooths the response, but the
+/// instantaneous current peaks make the dynamic droop worse than the static IR —
+/// which is the point of the analysis.
 #[allow(clippy::too_many_arguments)]
 fn transient(
     spec: &PdnSpec,
@@ -248,8 +287,9 @@ fn transient(
     cap: &[f64],
     dc: &[f64],
     x0: &[f64],
-) -> Result<DynIr, EmIrError> {
+) -> Result<TransientResult, EmIrError> {
     let n = free_names.len();
+    let pad_v: HashMap<&str, f64> = spec.pads.iter().map(|(s, v)| (s.as_str(), *v)).collect();
     let last = spec.switches.iter().map(|s| s.t50_ns + s.dur_ns).fold(0.0, f64::max);
     let min_dur = spec.switches.iter().map(|s| s.dur_ns).fold(f64::INFINITY, f64::min);
     let dt_ns = (min_dur / 10.0).max(1e-3); // resolve the pulse; >= 1 ps
@@ -259,6 +299,11 @@ fn transient(
     let mut v_prev = x0.to_vec();
     let mut vmin = x0.to_vec();
     let mut tmin = vec![0.0; n];
+    // per-segment current accumulators (RMS via Σi², peak via max|i|)
+    let nr = spec.resistors.len();
+    let mut sum_i2 = vec![0.0f64; nr];
+    let mut peak = vec![0.0f64; nr];
+    let mut steps = 0usize;
     let mut t_ns = 0.0;
     while t_ns < tstop_ns {
         t_ns += dt_ns;
@@ -280,17 +325,32 @@ fn transient(
                 tmin[k] = t_ns;
             }
         }
+        // segment currents at this timestep
+        let nodev = |name: &str| pad_v.get(name).copied().unwrap_or_else(|| v[free_idx[name]]);
+        for (ri, r) in spec.resistors.iter().enumerate() {
+            let i = (nodev(&r.a) - nodev(&r.b)) / r.r;
+            sum_i2[ri] += i * i;
+            peak[ri] = peak[ri].max(i.abs());
+        }
+        steps += 1;
         v_prev = v;
     }
+
+    let rms: Vec<f64> =
+        sum_i2.iter().map(|s| if steps > 0 { (s / steps as f64).sqrt() } else { 0.0 }).collect();
 
     let worst = (0..n).min_by(|&a, &b| vmin[a].total_cmp(&vmin[b])).unwrap_or(0);
     let v = vmin[worst];
     let drop = spec.vdd - v;
-    Ok(DynIr {
-        node: free_names[worst].clone(),
-        voltage: v,
-        drop,
-        drop_pct: 100.0 * drop / spec.vdd,
-        time_ns: tmin[worst],
+    Ok(TransientResult {
+        dyn_ir: DynIr {
+            node: free_names[worst].clone(),
+            voltage: v,
+            drop,
+            drop_pct: 100.0 * drop / spec.vdd,
+            time_ns: tmin[worst],
+        },
+        rms,
+        peak,
     })
 }

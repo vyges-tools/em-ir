@@ -20,6 +20,8 @@ pub struct LayerR {
     pub rpersq: f64,    // sheet resistance (ohm/square)
     pub width_um: f64,  // default routing width (microns); 0 if unspecified
     pub dc_jmax: f64,   // DC average current-density limit (mA/um); 0 if unspecified
+    pub ac_rms: f64,    // AC RMS current-density limit (mA/um); 0 if unspecified
+    pub ac_peak: f64,   // AC peak current-density limit (mA/um); 0 if unspecified
 }
 
 #[derive(Debug, Clone, Default)]
@@ -65,6 +67,10 @@ impl TechLef {
                             // scalar form `DCCURRENTDENSITY AVERAGE <mA/um> ;`; a table form
                             // (next-line WIDTH/TABLEENTRIES) leaves toks[2] non-numeric -> skip.
                             l.dc_jmax = toks[2].trim_end_matches(';').parse().unwrap_or(l.dc_jmax);
+                        } else if toks.len() >= 3 && toks[0] == "ACCURRENTDENSITY" && toks[1] == "RMS" {
+                            l.ac_rms = toks[2].trim_end_matches(';').parse().unwrap_or(l.ac_rms);
+                        } else if toks.len() >= 3 && toks[0] == "ACCURRENTDENSITY" && toks[1] == "PEAK" {
+                            l.ac_peak = toks[2].trim_end_matches(';').parse().unwrap_or(l.ac_peak);
                         }
                     }
                 }

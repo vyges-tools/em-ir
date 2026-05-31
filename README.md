@@ -169,15 +169,17 @@ the 30 placed `decap_3` cells lower the dynamic droop (19.0 % → 17.4 % at 10 f
 the magnitude scales with the real per-cell value), leaving the DC IR unchanged — as
 decoupling capacitance should.
 
-**Real EM from the LEF.** When the grid is extracted, each wire's EM limit is its
-LEF `DCCURRENTDENSITY AVERAGE` (mA/µm) × the wire's own width — a per-segment,
-width-dependent limit, not a flat per-layer number — and the static segment current
-is checked against it. On the sky130 counter (real LEF limits: met1/2 2.8, met3/4
-6.8, met5 10.17 mA/µm) a 20 mA draw flags 1 / 39 segments over limit (worst 1.10×).
-(This is DC-average EM; RMS/peak from the transient and per-cut via EM are the next
-steps.)
+**Real EM from the LEF — DC, RMS and peak.** When the grid is extracted, each wire's
+EM limits are its LEF current-densities (mA/µm) × the wire's own width — per-segment,
+width-dependent, not a flat per-layer number. The **DC-average** (`DCCURRENTDENSITY
+AVERAGE`) limit is checked against the static segment current; the **RMS** and
+**peak** (`ACCURRENTDENSITY RMS`/`PEAK`) limits are checked against the segment's RMS
+and peak current taken from the transient solve. On the sky130 counter (real LEF
+limits: DC met1/2 2.8 · met3/4 6.8 · met5 10.17, RMS met1 6.1 mA/µm) a 20 mA static
+draw flags 1 / 39 segments over the DC limit; the seam run does 78 checks (DC + RMS
+per segment) from the transient.
 
-The road to sign-off grade builds on the same network model: RMS/peak EM from the
-transient solve, per-cut via EM, a faster solver (warm-started / CG / multigrid for
-large grids), and electrothermal coupling (the BCD/power axis — the engine reserves
-the `EmIrError::ElectrothermalNotModeled` hook).
+The road to sign-off grade builds on the same network model: per-cut via EM, a
+faster solver (warm-started / CG / multigrid for large grids), and electrothermal
+coupling (the BCD/power axis — the engine reserves the
+`EmIrError::ElectrothermalNotModeled` hook).

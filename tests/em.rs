@@ -5,7 +5,7 @@ use vyges_em_ir::emir::analyze;
 use vyges_em_ir::extract::extract;
 use vyges_em_ir::job::EmIrJob;
 use vyges_em_ir::lef::TechLef;
-use vyges_em_ir::pdn::{PdnSpec, Resistor};
+use vyges_em_ir::pdn::{PdnSpec, Resistor, Switch};
 
 const LEF: &str = "\
 LAYER met5
@@ -80,6 +80,8 @@ fn per_segment_em_violation_flagged() {
             r: 1.0,
             layer: Some("met1".into()),
             em_limit: Some(0.001),
+            em_rms_limit: None,
+            em_peak_limit: None,
         }],
         loads: vec![("n1".into(), 0.002)],
         ..Default::default()
@@ -89,4 +91,36 @@ fn per_segment_em_violation_flagged() {
     assert_eq!(rep.em_violations.len(), 1);
     assert!((rep.em_violations[0].ratio - 2.0).abs() < 1e-6, "2 mA / 1 mA = 2x");
     assert!((rep.em_worst_ratio - 2.0).abs() < 1e-6);
+}
+
+fn rms_spec(rms_limit: f64) -> PdnSpec {
+    PdnSpec {
+        vdd: 1.8,
+        pads: vec![("p".into(), 1.8)],
+        resistors: vec![Resistor {
+            a: "p".into(),
+            b: "n1".into(),
+            r: 1.0,
+            layer: Some("met1".into()),
+            em_limit: None,
+            em_rms_limit: Some(rms_limit),
+            em_peak_limit: None,
+        }],
+        // a switching pulse draws current through the segment for the transient
+        switches: vec![Switch { node: "n1".into(), energy_pj: 1.0, t50_ns: 1.0, dur_ns: 0.1 }],
+        ..Default::default()
+    }
+}
+
+#[test]
+fn rms_em_from_transient_flags_over_limit() {
+    // a tiny RMS limit -> the segment's transient RMS current is over it (kind "rms")
+    let rep = analyze(&rms_spec(0.0002)).unwrap();
+    assert!(rep.dynamic.is_some(), "transient ran");
+    let rms: Vec<_> = rep.em_violations.iter().filter(|v| v.kind == "rms").collect();
+    assert_eq!(rms.len(), 1, "RMS current over the limit");
+    assert!(rms[0].ratio > 1.0);
+    // a generous limit -> no RMS violation
+    let rep2 = analyze(&rms_spec(0.05)).unwrap();
+    assert!(rep2.em_violations.iter().all(|v| v.kind != "rms"), "RMS met with a large limit");
 }

@@ -107,13 +107,16 @@ pub fn render_report(job: &EmIrJob, rep: &EmIrReport) -> String {
             rep.em_checked,
             rep.em_worst_ratio
         ));
-        s.push_str(&format!("    {:>6}  {:>9}  {:>7}  layer  segment\n", "ratio", "current", "limit"));
+        s.push_str(&format!(
+            "    {:>4}  {:>6}  {:>9}  {:>7}  layer  segment\n",
+            "kind", "ratio", "current", "limit"
+        ));
         let mut v = rep.em_violations.clone();
         v.sort_by(|a, b| b.ratio.partial_cmp(&a.ratio).unwrap_or(std::cmp::Ordering::Equal));
         for e in &v {
             s.push_str(&format!(
-                "    {:5.2}x  {:8.4}A  {:7.3}  {:5}  {}-{}\n",
-                e.ratio, e.current, e.limit, e.layer, e.a, e.b
+                "    {:>4}  {:5.2}x  {:8.4}A  {:7.3}  {:5}  {}-{}\n",
+                e.kind, e.ratio, e.current, e.limit, e.layer, e.a, e.b
             ));
         }
     }
@@ -156,8 +159,8 @@ pub fn report_json(job: &EmIrJob, rep: &EmIrReport) -> String {
             s.push(',');
         }
         s.push_str(&format!(
-            "{{\"a\":{:?},\"b\":{:?},\"layer\":{:?},\"current\":{:.6},\"limit\":{:.6},\"ratio\":{:.4}}}",
-            e.a, e.b, e.layer, e.current, e.limit, e.ratio
+            "{{\"kind\":{:?},\"a\":{:?},\"b\":{:?},\"layer\":{:?},\"current\":{:.6},\"limit\":{:.6},\"ratio\":{:.4}}}",
+            e.kind, e.a, e.b, e.layer, e.current, e.limit, e.ratio
         ));
     }
     s.push_str("]}\n");
