@@ -8,9 +8,22 @@
 //! pad p2 1.8                # ...or an explicit voltage
 //! res p1 n1 0.05 met5       # resistor: nodeA nodeB ohms [layer]
 //! via n1 m1 2.0             # a via resistance (layer = "via")
-//! load n1 0.002             # current drawn out of a node (amps)
+//! load n1 0.002             # static current drawn out of a node (amps)
 //! emlimit met5 0.01         # per-layer EM current limit (amps/segment)
 //! ```
+//!
+//! Dynamic (transient) IR additionally needs node capacitance and switching
+//! current events — the latter fed by `vyges-char`'s `internal_power`:
+//!
+//! ```text
+//! cap  n1 0.5               # decoupling/parasitic capacitance at a node (pF)
+//! switch n1 0.012 1.0 0.08  # switching event: node energy(pJ) t50(ns) [dur(ns)]
+//! ```
+//!
+//! A `switch` event draws charge `Q = energy/vdd` from the rail as a triangular
+//! current pulse peaking at `t50` over `dur`. The `energy` is the per-event supply
+//! energy from char (its `internal_power` value, plus the net's load-charging
+//! ½·C·V² for a rising output) — this is the char → em-ir seam.
 //!
 //! Pure std — fully unit-tested offline.
 
@@ -24,6 +37,17 @@ pub struct Resistor {
     pub layer: Option<String>,
 }
 
+/// A switching-current event at a node: the rail delivers `energy_pj`/vdd of charge
+/// as a triangular pulse peaking at `t50_ns` over `dur_ns`. `energy_pj` is char's
+/// per-event supply energy (internal_power + load-charging).
+#[derive(Debug, Clone)]
+pub struct Switch {
+    pub node: String,
+    pub energy_pj: f64,
+    pub t50_ns: f64,
+    pub dur_ns: f64,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct PdnSpec {
     pub vdd: f64,
@@ -31,6 +55,16 @@ pub struct PdnSpec {
     pub resistors: Vec<Resistor>,
     pub loads: Vec<(String, f64)>,
     pub em_limits: BTreeMap<String, f64>,
+    pub caps: Vec<(String, f64)>, // node decap/parasitic capacitance (pF)
+    pub switches: Vec<Switch>,    // switching-current events (dynamic IR)
+}
+
+impl PdnSpec {
+    /// True when the spec carries dynamic stimulus (switching events) — the engine
+    /// then runs the transient IR analysis on top of the static solve.
+    pub fn is_dynamic(&self) -> bool {
+        !self.switches.is_empty()
+    }
 }
 
 #[derive(Debug)]
@@ -101,6 +135,29 @@ impl PdnSpec {
                     let layer = toks.get(1).ok_or_else(|| PdnError("emlimit needs a layer".into()))?;
                     let lim = num(toks.get(2).copied(), "emlimit amps")?;
                     spec.em_limits.insert(layer.to_string(), lim);
+                }
+                "cap" => {
+                    let node = toks.get(1).ok_or_else(|| PdnError("cap needs a node".into()))?;
+                    let c = num(toks.get(2).copied(), "cap pF")?;
+                    spec.caps.push((node.to_string(), c));
+                }
+                "switch" => {
+                    let node = toks.get(1).ok_or_else(|| PdnError("switch needs a node".into()))?;
+                    let energy = num(toks.get(2).copied(), "switch energy(pJ)")?;
+                    let t50 = num(toks.get(3).copied(), "switch t50(ns)")?;
+                    let dur = match toks.get(4) {
+                        Some(t) => num(Some(t), "switch dur(ns)")?,
+                        None => 0.1,
+                    };
+                    if dur <= 0.0 {
+                        return Err(PdnError(format!("switch {node}: dur must be > 0")));
+                    }
+                    spec.switches.push(Switch {
+                        node: node.to_string(),
+                        energy_pj: energy,
+                        t50_ns: t50,
+                        dur_ns: dur,
+                    });
                 }
                 other => return Err(PdnError(format!("unknown keyword: {other:?}"))),
             }

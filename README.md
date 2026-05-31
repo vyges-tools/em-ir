@@ -120,12 +120,26 @@ never in this repository.
 
 ## Current state (2026-05-30)
 
-v0 does **static (DC) IR drop** via a Gauss-Seidel solve of the conductance
-system, plus per-layer **EM current-limit** checks — fully offline, no external
-deps, 8 tests green. It is enough to find IR hotspots and over-limit segments on
-a described PDN.
+v0 did **static (DC) IR drop** via a Gauss-Seidel solve of the conductance system
+plus per-layer **EM current-limit** checks. It now also does **dynamic (transient)
+IR drop**: add node capacitance (`cap`) and switching-current events (`switch`) to
+the PDN and the engine runs a **backward-Euler time-stepping solve** (each step a
+conductance solve with `C/dt` on the diagonal), reporting the deepest droop reached
+at any node and when. The dynamic droop exceeds the static IR because the
+instantaneous current peaks beat the DC average — which is the point of the check.
 
-The road to sign-off grade builds on the same network model: PDN extraction from
-DEF/LEF geometry, dynamic/transient IR (decap + switching current), real EM as
-current-density × wire geometry, and electrothermal coupling (the BCD/power axis
-— the engine reserves the `EmIrError::ElectrothermalNotModeled` hook).
+**The char → em-ir seam.** A `switch` event's charge is `energy / vdd`, where
+`energy` is the per-switch supply energy `vyges-char` characterizes (its
+`internal_power` table value plus the net's load-charging ½·C·V²). So a flow runs
+`char` to get per-cell switching energy, annotates each switching instance, and
+em-ir turns those into the time-domain current pulses that drive the transient
+droop — the per-instance dynamic power flows straight from the characterizer into
+power-integrity. Demonstrated end-to-end on a small block using the measured sky130
+`inv_1` energy (~0.0151 pJ/switch): dynamic droop 0.07% vs static 0.05%, resolved
+to the switching instant. Fully offline, no external deps, 12 tests green.
+
+The road to sign-off grade builds on the same network model: **PDN extraction from
+DEF/LEF geometry** (today the PDN is described directly), real EM as
+current-density × wire geometry, a faster solver (warm-started / CG / multigrid for
+large grids), and electrothermal coupling (the BCD/power axis — the engine reserves
+the `EmIrError::ElectrothermalNotModeled` hook).

@@ -37,10 +37,14 @@ pub fn demo() -> (EmIrJob, EmIrReport) {
     (job, rep)
 }
 
-/// Whether the report passes the job's IR-drop and EM gates.
+/// Whether the report passes the job's IR-drop and EM gates. When a transient
+/// analysis ran, the **dynamic** droop is the binding IR check (it's the deeper one).
 pub fn passes(job: &EmIrJob, rep: &EmIrReport) -> bool {
-    let ir_ok = rep.worst_ir.as_ref().map(|w| w.drop_pct <= job.ir_limit_pct).unwrap_or(true);
-    ir_ok && rep.em_violations.is_empty()
+    let ir_pct = match &rep.dynamic {
+        Some(d) => d.drop_pct,
+        None => rep.worst_ir.as_ref().map(|w| w.drop_pct).unwrap_or(0.0),
+    };
+    ir_pct <= job.ir_limit_pct && rep.em_violations.is_empty()
 }
 
 pub fn render_report(job: &EmIrJob, rep: &EmIrReport) -> String {
@@ -59,6 +63,13 @@ pub fn render_report(job: &EmIrJob, rep: &EmIrReport) -> String {
             ));
         }
         None => s.push_str("  worst IR drop: (no free nodes)\n"),
+    }
+    if let Some(d) = &rep.dynamic {
+        let verdict = if d.drop_pct <= job.ir_limit_pct { "MET" } else { "VIOLATED" };
+        s.push_str(&format!(
+            "  worst DYNAMIC droop: {:.4} V ({:.2}%) at {} @ {:.3} ns   [Vmin {:.4} V]   [{}]\n",
+            d.drop, d.drop_pct, d.node, d.time_ns, d.voltage, verdict
+        ));
     }
     if rep.em_checked == 0 {
         s.push_str("  EM: no segments had a layer limit (set `emlimit <layer> <A>`)\n");
@@ -97,9 +108,23 @@ pub fn report_json(job: &EmIrJob, rep: &EmIrReport) -> String {
         )),
         None => s.push_str("\"worst_ir\":null,"),
     }
+    match &rep.dynamic {
+        Some(d) => s.push_str(&format!(
+            "\"dynamic\":{{\"node\":{:?},\"voltage\":{:.6},\"drop\":{:.6},\"drop_pct\":{:.4},\"time_ns\":{:.4}}},",
+            d.node, d.voltage, d.drop, d.drop_pct, d.time_ns
+        )),
+        None => s.push_str("\"dynamic\":null,"),
+    }
+    // IR met: the dynamic droop binds when present, else the static drop.
+    let ir_pct = rep
+        .dynamic
+        .as_ref()
+        .map(|d| d.drop_pct)
+        .or_else(|| rep.worst_ir.as_ref().map(|w| w.drop_pct))
+        .unwrap_or(0.0);
     s.push_str(&format!(
         "\"ir_met\":{},\"em_checked\":{},\"em_worst_ratio\":{:.4},",
-        rep.worst_ir.as_ref().map(|w| w.drop_pct <= job.ir_limit_pct).unwrap_or(true),
+        ir_pct <= job.ir_limit_pct,
         rep.em_checked,
         rep.em_worst_ratio
     ));
