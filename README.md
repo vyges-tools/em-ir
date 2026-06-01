@@ -31,6 +31,12 @@ instead: readable, diffable, schema-checkable, with no control flow to get wrong
 This is a toolchain-wide property — char, sta-si, and extract are configured the
 same way.
 
+**Validate fast, sign off with your tool.** `vyges-em-ir` works from a plain
+resistor-network / DEF + power description, so it complements rather than replaces the
+golden flow: run fast IR/EM checks during iteration, and keep Voltus or RedHawk-SC for
+final power sign-off. It sits *alongside* what you already run (correlated to PDNSim as
+its baseline) — the quick inner-loop check where you most need fast feedback.
+
 ## The problem it solves
 
 Given a **PDN resistor network** — supply pads at a fixed voltage, resistive
