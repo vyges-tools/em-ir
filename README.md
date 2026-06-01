@@ -24,6 +24,13 @@ The open baseline is **PDNSim** (in OpenROAD), which does static IR and basic EM
 `vyges-em-ir` is an open engine in that space, behind a plain resistor-network
 file format, correlated against PDNSim as its baseline.
 
+**Describe the job, not the script.** The incumbent power-sign-off flows are driven
+by hand-written **Tcl** — a recurring source of silent typos, copy-paste drift, and
+brittle maintenance. `vyges-em-ir` takes a small **declarative job file** (`.emir`)
+instead: readable, diffable, schema-checkable, with no control flow to get wrong.
+This is a toolchain-wide property — char, sta-si, and extract are configured the
+same way.
+
 ## The problem it solves
 
 Given a **PDN resistor network** — supply pads at a fixed voltage, resistive
