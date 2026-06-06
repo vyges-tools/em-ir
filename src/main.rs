@@ -105,6 +105,7 @@ fn main() {
 
     if cli.version {
         println!("vyges-em-ir {}", vyges_em_ir::VERSION);
+        println!("{}", vyges_em_ir::COPYRIGHT);
         return;
     }
     let cmd = cli.positionals.first().cloned().unwrap_or_default();
