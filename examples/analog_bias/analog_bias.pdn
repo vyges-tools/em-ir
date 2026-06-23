@@ -1,0 +1,32 @@
+# An analog supply grid — supply pad on top metal, a resistive metal mesh routing
+# down to two internal analog branches, driven by DC operating-point currents.
+#
+# This is the SAME .pdn physics as a digital grid: the loads here are an analog
+# op-point (a bias reference and a power-amplifier branch), not digital activity.
+vdd 1.8
+
+# single supply pad, tied to vdd, on the top strap layer
+pad p1
+
+# top-metal strap from the pad into the mesh
+res p1   trunk  0.05 met5
+
+# mesh on met4 fanning out toward the two analog branches
+res trunk near   0.20 met4
+res trunk mid    0.30 met4
+res mid   far    0.40 met4
+
+# via stack down to the device-level metal (met1) where the branches tap in
+via near  bias_m1 2.0
+via far   pa_m1   2.0
+
+# DC operating-point currents (amps):
+#   - a small, near bias-reference branch
+#   - a large power-amplifier branch at the electrically most distant node
+load bias_m1 0.0010
+load pa_m1   0.0300
+
+# per-layer EM current limits (amps/segment)
+emlimit met5 0.50
+emlimit met4 0.10
+emlimit via  0.05

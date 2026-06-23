@@ -112,6 +112,32 @@ emlimit met5 0.50       # per-layer EM current limit (amps/segment)
 A complete, runnable example is in [`examples/block/`](examples/block/);
 `vyges-em-ir run examples/block/block.emir` reports IR drop + EM on a small mesh.
 
+## Domain coverage — digital *and* analog / mixed-signal
+
+The solve is generic physics: `G·V = I` over a conductance matrix, where `G` is a
+resistor mesh and `I` is per-node current. Nothing in the path assumes standard cells,
+a clock, or digital switching activity — the `.pdn` is just supply pads, resistors/vias,
+and node loads. **The current can come from any source:** digital activity (a power
+estimate per instance) *or* an analog DC operating point (bias / power-amplifier branch
+currents). So `vyges-em-ir` runs on **analog and mixed-signal** supply grids exactly as
+it does on digital ones — same IR-drop and EM (current-density) check, same file format.
+
+- Digital: `examples/block/` — a std-cell block's PDN mesh with a lumped load.
+- Analog: `examples/analog_bias/` — an analog supply grid (pad → met5 strap → met4 mesh
+  → via stack to met1) driven by two op-point currents: a 1 mA bias reference and a 30 mA
+  power-amplifier branch at the most distant node. The worst IR drop lands on the PA
+  branch (highest current × longest resistive path), and the via feeding it is the EM
+  hotspot.
+
+```sh
+vyges-em-ir run examples/analog_bias/analog_bias.emir   # IR drop + EM on an analog grid
+```
+
+Scope here is **physical power-integrity** (IR drop, EM current density); analog
+*functional / DC operating-point* sign-off is out of scope — the op-point currents come
+from an external simulator (e.g. SPICE), and this engine consumes them, it doesn't solve
+the analog circuit.
+
 ## Open core, certified fab plugins
 
 `vyges-em-ir` is open and contains **no foundry-confidential data**. It runs out
