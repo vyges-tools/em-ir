@@ -130,6 +130,30 @@ fn emit(job: &EmIrJob, rep: &EmIrReport, cli: &Cli) -> ! {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.iter().any(|a| a == "--describe") {
+        // Machine-readable description of `run` for tooling that drives it.
+        const DESCRIBE: &str = r#"{
+  "name": "em-ir",
+  "summary": "EM / IR-drop power-integrity sign-off (PDN -> report)",
+  "invocation": {
+    "args_template": ["run", "{job}"],
+    "optional": [ { "arg": "out", "flag": "-o" } ],
+    "emits_json": true
+  },
+  "inputs": {
+    "type": "object",
+    "required": ["job"],
+    "properties": {
+      "job": { "type": "string", "description": "Path to the EM/IR-drop job file (PDN + limits)." },
+      "out": { "type": "string", "description": "Write output to FILE instead of stdout." }
+    }
+  },
+  "artifacts": []
+}
+"#;
+        print!("{DESCRIBE}");
+        return;
+    }
     let cli = parse_cli(&args);
 
     if cli.bug_report {
