@@ -28,6 +28,7 @@ flags:
   --fail-on-violation   exit 3 if IR drop exceeds the limit or any EM segment fails
   -q, --quiet           suppress non-essential output
   -v, --verbose         extra detail on stderr
+  --describe            print a machine-readable JSON description of the command
   -h, --help            show this help
   -V, --version         show version
   --bug-report     file a bug (central: vyges/community)
