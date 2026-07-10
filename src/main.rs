@@ -148,7 +148,7 @@ fn main() {
       "out": { "type": "string", "description": "Write output to FILE instead of stdout." }
     }
   },
-  "artifacts": []
+  "artifacts": [ { "role": "emir_report", "from_arg": "out" } ]
 }
 "#;
         print!("{DESCRIBE}");
