@@ -148,7 +148,8 @@ fn main() {
       "out": { "type": "string", "description": "Write output to FILE instead of stdout." }
     }
   },
-  "artifacts": [ { "role": "emir_report", "from_arg": "out" } ]
+  "artifacts": [ { "role": "emir_report", "from_arg": "out" } ],
+  "consumes": ["pdn", "power_report", "spef"]
 }
 "#;
         print!("{DESCRIBE}");
