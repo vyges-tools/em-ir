@@ -113,7 +113,83 @@ fn write_out(text: &str, cli: &Cli) {
     }
 }
 
+/// Emit the vyges-events causal trail for the EM/IR verdict + each violation — to
+/// stderr (the report goes to stdout / -o). code=IR-DROP / EM-VIOL is the
+/// clustering key; objects are the net/segment refs for cross-stage co-reference.
+fn emit_em_ir_events(job: &EmIrJob, rep: &EmIrReport) {
+    use vyges_events::{Event, Severity};
+    let e = |sev, code: &str, msg: String, objs: Vec<String>| {
+        vyges_events::emit(&Event::new("vyges-em-ir", sev, msg).with_code(code).with_objects(objs));
+    };
+    let mut ir_viols = 0usize;
+    // static worst IR-drop node over the job's limit
+    if let Some(w) = &rep.worst_ir {
+        if w.drop_pct > job.ir_limit_pct {
+            ir_viols += 1;
+            e(
+                Severity::Warn,
+                "IR-DROP",
+                format!(
+                    "static IR drop {:.4} V ({:.2}%) at {} exceeds limit {:.1}%",
+                    w.drop, w.drop_pct, w.node, job.ir_limit_pct
+                ),
+                vec![format!("net:{}", w.node)],
+            );
+        }
+    }
+    // dynamic (transient) droop over the limit — the binding IR check when present
+    if let Some(d) = &rep.dynamic {
+        if d.drop_pct > job.ir_limit_pct {
+            ir_viols += 1;
+            e(
+                Severity::Warn,
+                "IR-DROP",
+                format!(
+                    "dynamic droop {:.4} V ({:.2}%) at {} @ {:.3} ns exceeds limit {:.1}%",
+                    d.drop, d.drop_pct, d.node, d.time_ns, job.ir_limit_pct
+                ),
+                vec![format!("net:{}", d.node)],
+            );
+        }
+    }
+    // per-segment EM violations (dc / rms / peak current-density over the layer limit)
+    for v in &rep.em_violations {
+        e(
+            Severity::Warn,
+            "EM-VIOL",
+            format!(
+                "{} EM current {:.4} A exceeds limit {:.3} A ({:.2}x) on {} segment {}-{}",
+                v.kind, v.current, v.limit, v.ratio, v.layer, v.a, v.b
+            ),
+            vec![format!("segment:{}-{}", v.a, v.b), format!("layer:{}", v.layer)],
+        );
+    }
+    // completion summary — peak IR drop (dynamic binds when present) + worst EM ratio
+    let peak_ir_pct = rep
+        .dynamic
+        .as_ref()
+        .map(|d| d.drop_pct)
+        .or_else(|| rep.worst_ir.as_ref().map(|w| w.drop_pct))
+        .unwrap_or(0.0);
+    let total_viols = ir_viols + rep.em_violations.len();
+    let sev = if total_viols == 0 { Severity::Info } else { Severity::Warn };
+    e(
+        sev,
+        "EMIR-DONE",
+        format!(
+            "EM/IR {} — peak IR drop {:.2}% (limit {:.1}%), worst EM {:.2}x, {} violation(s)",
+            if total_viols == 0 { "clean" } else { "VIOLATED" },
+            peak_ir_pct,
+            job.ir_limit_pct,
+            rep.em_worst_ratio,
+            total_viols
+        ),
+        vec![],
+    );
+}
+
 fn emit(job: &EmIrJob, rep: &EmIrReport, cli: &Cli) -> ! {
+    emit_em_ir_events(job, rep);
     let text = if cli.json {
         engine::report_json(job, rep)
     } else {
