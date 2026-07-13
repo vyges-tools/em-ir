@@ -245,7 +245,7 @@ fn main() {
     }
   },
   "artifacts": [ { "role": "emir_report", "from_arg": "out" } ],
-  "consumes": ["pdn", "power_report", "spef"]
+  "consumes": ["pdn", "power_report", "spef", "emgeom"]
 }
 "#;
         print!("{DESCRIBE}");
