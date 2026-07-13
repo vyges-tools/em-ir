@@ -21,6 +21,12 @@ usage:
   vyges-em-ir run   JOB [-o OUT] [--json] [--fail-on-violation]
   vyges-em-ir check JOB
   vyges-em-ir demo  [-o OUT] [--json]
+  vyges-em-ir em-density (--geom G | --spef S) --lef TECH.lef
+                         [--current-map C | --net-current mA] [--fail-on-violation]
+
+em-density is EM sign-off on *extracted SPEF*: it screens each metal segment's
+current density (from the loom EM geom sidecar: layer + width) against the tech
+LEF DCCURRENTDENSITY (and AC RMS/PEAK when the current map supplies them).
 
 flags:
   -o FILE               write output to FILE (default: stdout)
@@ -68,6 +74,13 @@ struct Cli {
     feature_request: bool,
     sponsor: bool,
     star: bool,
+    // em-density (extracted-SPEF EM sign-off)
+    spef: Option<String>,
+    geom: Option<String>,
+    lef: Option<String>,
+    current_map: Option<String>,
+    net_current: Option<f64>,
+    design: Option<String>,
 }
 
 fn parse_cli(args: &[String]) -> Cli {
@@ -81,6 +94,12 @@ fn parse_cli(args: &[String]) -> Cli {
             }
             "--json" => c.json = true,
             "--fail-on-violation" => c.fail_on_violation = true,
+            "--spef" => { c.spef = args.get(i + 1).cloned(); i += 1; }
+            "--geom" => { c.geom = args.get(i + 1).cloned(); i += 1; }
+            "--lef" => { c.lef = args.get(i + 1).cloned(); i += 1; }
+            "--current-map" => { c.current_map = args.get(i + 1).cloned(); i += 1; }
+            "--net-current" => { c.net_current = args.get(i + 1).and_then(|s| s.parse().ok()); i += 1; }
+            "--design" => { c.design = args.get(i + 1).cloned(); i += 1; }
             "-q" | "--quiet" => c.quiet = true,
             "-v" | "--verbose" => c.verbose = true,
             "-h" | "--help" => c.help = true,
@@ -301,10 +320,69 @@ fn main() {
                 }
             }
         }
+        "em-density" => em_density(&cli),
         other => {
             eprintln!("vyges-em-ir: unknown command {other:?}\n");
             print!("{USAGE}");
             exit(2);
         }
     }
+}
+
+/// `em-density` — electromigration sign-off from extracted SPEF geometry. Reads
+/// the loom EM geom sidecar (per-segment layer/width) + tech LEF current-density
+/// limits + a per-net current, screens every segment, and reports through the same
+/// EmIrReport path (ranked EM-VIOL, exit-3 with --fail-on-violation).
+fn em_density(cli: &Cli) -> ! {
+    use vyges_em_ir::emgeom::EmGeom;
+    use vyges_em_ir::emsignoff::{screen, CurrentMap};
+    use vyges_em_ir::job::EmIrJob;
+    use vyges_em_ir::lef::TechLef;
+
+    // geom sidecar: --geom, else the SPEF path with a .emgeom extension (the pair
+    // the RCX front end writes together).
+    let geom_path = cli.geom.clone().or_else(|| {
+        cli.spef.as_ref().map(|s| {
+            let p = std::path::Path::new(s);
+            p.with_extension("emgeom").to_string_lossy().into_owned()
+        })
+    });
+    let Some(geom_path) = geom_path else {
+        eprintln!("usage: vyges-em-ir em-density (--geom G | --spef S) --lef TECH.lef\n         [--current-map C | --net-current mA] [--fail-on-violation]");
+        exit(2);
+    };
+    let Some(lef_path) = cli.lef.clone() else {
+        eprintln!("error: em-density needs a tech LEF with DCCURRENTDENSITY (--lef PATH)");
+        exit(2);
+    };
+
+    let geom = match EmGeom::load(&geom_path) {
+        Ok(g) => g,
+        Err(e) => { eprintln!("error: {e}"); exit(2); }
+    };
+    let lef = match TechLef::load(&lef_path) {
+        Ok(l) => l,
+        Err(e) => { eprintln!("error: {lef_path}: {e}"); exit(2); }
+    };
+    let mut cur = match &cli.current_map {
+        Some(p) => match CurrentMap::load(p) {
+            Ok(c) => c,
+            Err(e) => { eprintln!("error: {p}: {e}"); exit(2); }
+        },
+        None => CurrentMap::default(),
+    };
+    if let Some(nc) = cli.net_current {
+        cur.default_avg_ma = nc;
+    }
+    if cur.avg.is_empty() && cur.default_avg_ma <= 0.0 && !cli.quiet {
+        eprintln!("note: no current supplied (--current-map / --net-current); reporting limits only, no violations");
+    }
+
+    let rep = screen(&geom, &lef, &cur);
+    let job = EmIrJob {
+        design: cli.design.clone().unwrap_or_else(|| geom.design.clone()),
+        ir_limit_pct: 0.0,
+        ..Default::default()
+    };
+    emit(&job, &rep, cli);
 }

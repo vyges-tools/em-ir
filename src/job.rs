@@ -11,7 +11,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct EmIrJob {
     pub design: String,
     pub pdn: String, // a described `.pdn` network (empty when extracting from DEF/LEF)

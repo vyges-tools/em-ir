@@ -35,6 +35,12 @@ pub mod lef {
 }
 pub mod pdn;
 pub mod solver;
+/// EM geometry sidecar reader, re-exported from loom — the per-segment layer/width
+/// the extracted-SPEF EM sign-off screens.
+pub use vyges_loom::emgeom;
+/// Extracted-SPEF electromigration sign-off (signal-net current density vs LEF
+/// `DCCURRENTDENSITY`), a companion to the DEF+LEF PDN EM path.
+pub mod emsignoff;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const COPYRIGHT: &str = "© 2026 Vyges. All Rights Reserved.  https://vyges.com";
