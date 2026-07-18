@@ -245,6 +245,11 @@ fn main() {
     }
   },
   "artifacts": [ { "role": "emir_report", "from_arg": "out" } ],
+  "assertion": {
+    "id": "power-integrity-met",
+    "field": "pi_met",
+    "pass_when": { "is_true": true }
+  },
   "consumes": ["pdn", "power_report", "spef", "emgeom"]
 }
 "#;

@@ -17,5 +17,27 @@ fn example_block_analyzes_clean() {
     let j = report_json(&job, &rep);
     assert!(j.contains("\"design\":\"block\""));
     assert!(j.contains("\"ir_met\":true"));
+    assert!(j.contains("\"pi_met\":true"));
     assert!(j.trim_end().ends_with('}'));
+}
+
+/// `pi_met` is the whole power-integrity verdict; `ir_met` is only half of it.
+/// The demo carries both an over-limit IR drop and EM violations, so a consumer
+/// reading `ir_met` alone would miss the EM half on a design that met IR.
+#[test]
+fn pi_met_covers_em_not_just_ir() {
+    let (job, rep) = vyges_em_ir::engine::demo();
+    assert!(!rep.em_violations.is_empty(), "demo should carry EM violations");
+    assert!(!passes(&job, &rep));
+
+    let j = report_json(&job, &rep);
+    assert!(j.contains("\"pi_met\":false"));
+
+    // Now relax the IR limit so IR alone would report met — `pi_met` must still
+    // be false, because the EM violations are untouched.
+    let mut relaxed = job.clone();
+    relaxed.ir_limit_pct = 100.0;
+    let j = report_json(&relaxed, &rep);
+    assert!(j.contains("\"ir_met\":true"), "IR now within limit: {j}");
+    assert!(j.contains("\"pi_met\":false"), "EM violations must still fail the verdict: {j}");
 }

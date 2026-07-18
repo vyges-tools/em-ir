@@ -154,6 +154,11 @@ pub fn report_json(job: &EmIrJob, rep: &EmIrReport) -> String {
         rep.em_checked,
         rep.em_worst_ratio
     ));
+    // The single power-integrity verdict: IR within the job's limit AND no EM
+    // violation. `ir_met` alone is only half the check — a design can sit well
+    // inside the IR budget and still carry EM violations — so consumers that
+    // want one pass/fail must read this, not `ir_met`.
+    s.push_str(&format!("\"pi_met\":{},", passes(job, rep)));
     s.push_str("\"em_violations\":[");
     for (i, e) in rep.em_violations.iter().enumerate() {
         if i > 0 {
