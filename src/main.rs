@@ -55,7 +55,11 @@ fn link(label: &str, url: &str) {
     use std::io::IsTerminal;
     println!("{label}:\n  {url}");
     if std::io::stdout().is_terminal() {
-        let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+        let opener = if cfg!(target_os = "macos") {
+            "open"
+        } else {
+            "xdg-open"
+        };
         let _ = std::process::Command::new(opener).arg(url).status();
     }
 }
@@ -94,12 +98,30 @@ fn parse_cli(args: &[String]) -> Cli {
             }
             "--json" => c.json = true,
             "--fail-on-violation" => c.fail_on_violation = true,
-            "--spef" => { c.spef = args.get(i + 1).cloned(); i += 1; }
-            "--geom" => { c.geom = args.get(i + 1).cloned(); i += 1; }
-            "--lef" => { c.lef = args.get(i + 1).cloned(); i += 1; }
-            "--current-map" => { c.current_map = args.get(i + 1).cloned(); i += 1; }
-            "--net-current" => { c.net_current = args.get(i + 1).and_then(|s| s.parse().ok()); i += 1; }
-            "--design" => { c.design = args.get(i + 1).cloned(); i += 1; }
+            "--spef" => {
+                c.spef = args.get(i + 1).cloned();
+                i += 1;
+            }
+            "--geom" => {
+                c.geom = args.get(i + 1).cloned();
+                i += 1;
+            }
+            "--lef" => {
+                c.lef = args.get(i + 1).cloned();
+                i += 1;
+            }
+            "--current-map" => {
+                c.current_map = args.get(i + 1).cloned();
+                i += 1;
+            }
+            "--net-current" => {
+                c.net_current = args.get(i + 1).and_then(|s| s.parse().ok());
+                i += 1;
+            }
+            "--design" => {
+                c.design = args.get(i + 1).cloned();
+                i += 1;
+            }
             "-q" | "--quiet" => c.quiet = true,
             "-v" | "--verbose" => c.verbose = true,
             "-h" | "--help" => c.help = true,
@@ -138,7 +160,11 @@ fn write_out(text: &str, cli: &Cli) {
 fn emit_em_ir_events(job: &EmIrJob, rep: &EmIrReport) {
     use vyges_events::{Event, Severity};
     let e = |sev, code: &str, msg: String, objs: Vec<String>| {
-        vyges_events::emit(&Event::new("vyges-em-ir", sev, msg).with_code(code).with_objects(objs));
+        vyges_events::emit(
+            &Event::new("vyges-em-ir", sev, msg)
+                .with_code(code)
+                .with_objects(objs),
+        );
     };
     let mut ir_viols = 0usize;
     // static worst IR-drop node over the job's limit
@@ -180,7 +206,10 @@ fn emit_em_ir_events(job: &EmIrJob, rep: &EmIrReport) {
                 "{} EM current {:.4} A exceeds limit {:.3} A ({:.2}x) on {} segment {}-{}",
                 v.kind, v.current, v.limit, v.ratio, v.layer, v.a, v.b
             ),
-            vec![format!("segment:{}-{}", v.a, v.b), format!("layer:{}", v.layer)],
+            vec![
+                format!("segment:{}-{}", v.a, v.b),
+                format!("layer:{}", v.layer),
+            ],
         );
     }
     // completion summary — peak IR drop (dynamic binds when present) + worst EM ratio
@@ -191,13 +220,21 @@ fn emit_em_ir_events(job: &EmIrJob, rep: &EmIrReport) {
         .or_else(|| rep.worst_ir.as_ref().map(|w| w.drop_pct))
         .unwrap_or(0.0);
     let total_viols = ir_viols + rep.em_violations.len();
-    let sev = if total_viols == 0 { Severity::Info } else { Severity::Warn };
+    let sev = if total_viols == 0 {
+        Severity::Info
+    } else {
+        Severity::Warn
+    };
     e(
         sev,
         "EMIR-DONE",
         format!(
             "EM/IR {} — peak IR drop {:.2}% (limit {:.1}%), worst EM {:.2}x, {} violation(s)",
-            if total_viols == 0 { "clean" } else { "VIOLATED" },
+            if total_viols == 0 {
+                "clean"
+            } else {
+                "VIOLATED"
+            },
             peak_ir_pct,
             job.ir_limit_pct,
             rep.em_worst_ratio,
@@ -271,7 +308,11 @@ fn main() {
         return link("Star vyges-em-ir on GitHub ⭐", STAR_URL);
     }
     if cli.version {
-        println!("vyges-em-ir {} ({})", vyges_em_ir::VERSION, env!("VYGES_GIT_SHA"));
+        println!(
+            "vyges-em-ir {} ({})",
+            vyges_em_ir::VERSION,
+            env!("VYGES_GIT_SHA")
+        );
         println!("{}", vyges_em_ir::COPYRIGHT);
         return;
     }
@@ -363,16 +404,25 @@ fn em_density(cli: &Cli) -> ! {
 
     let geom = match EmGeom::load(&geom_path) {
         Ok(g) => g,
-        Err(e) => { eprintln!("error: {e}"); exit(2); }
+        Err(e) => {
+            eprintln!("error: {e}");
+            exit(2);
+        }
     };
     let lef = match TechLef::load(&lef_path) {
         Ok(l) => l,
-        Err(e) => { eprintln!("error: {lef_path}: {e}"); exit(2); }
+        Err(e) => {
+            eprintln!("error: {lef_path}: {e}");
+            exit(2);
+        }
     };
     let mut cur = match &cli.current_map {
         Some(p) => match CurrentMap::load(p) {
             Ok(c) => c,
-            Err(e) => { eprintln!("error: {p}: {e}"); exit(2); }
+            Err(e) => {
+                eprintln!("error: {p}: {e}");
+                exit(2);
+            }
         },
         None => CurrentMap::default(),
     };

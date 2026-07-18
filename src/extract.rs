@@ -78,7 +78,9 @@ fn on_segment(x1: i64, y1: i64, x2: i64, y2: i64, px: i64, py: i64) -> bool {
 
 /// Build a `PdnSpec` from the extracted DEF power net + LEF resistances + job params.
 pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, String> {
-    let net = def.power_net().ok_or_else(|| "no power net in DEF".to_string())?;
+    let net = def
+        .power_net()
+        .ok_or_else(|| "no power net in DEF".to_string())?;
     if net.segs.is_empty() {
         return Err(format!("power net {:?} has no routed segments", net.name));
     }
@@ -98,11 +100,21 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
         let lr = lef.layers.get(&s.layer);
         let rpersq = lr.map(|l| l.rpersq).unwrap_or(0.0);
         if rpersq <= 0.0 {
-            return Err(format!("layer {:?} has no RESISTANCE RPERSQ in the LEF", s.layer));
+            return Err(format!(
+                "layer {:?} has no RESISTANCE RPERSQ in the LEF",
+                s.layer
+            ));
         }
-        let w_um = if s.width_dbu > 0.0 { s.width_dbu / dbu } else { lr.map(|l| l.width_um).unwrap_or(0.0) };
+        let w_um = if s.width_dbu > 0.0 {
+            s.width_dbu / dbu
+        } else {
+            lr.map(|l| l.width_um).unwrap_or(0.0)
+        };
         if w_um <= 0.0 {
-            return Err(format!("segment on {:?} has no width (DEF or LEF)", s.layer));
+            return Err(format!(
+                "segment on {:?} has no width (DEF or LEF)",
+                s.layer
+            ));
         }
         // EM limits (A) for this wire = LEF current-density (mA/um) × its width (um).
         let lim = |j: f64| if j > 0.0 { Some(j * w_um * 1e-3) } else { None };
@@ -148,7 +160,9 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
 
     // via resistors: at each via location connect the adjacent metal layers present.
     for &(x, y) in &via_locs {
-        let Some(layers) = at_point.get(&(x, y)) else { continue };
+        let Some(layers) = at_point.get(&(x, y)) else {
+            continue;
+        };
         let mut ls: Vec<&String> = layers.iter().collect();
         ls.sort_by_key(|l| metal_index(l));
         for w in ls.windows(2) {
@@ -176,7 +190,10 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
         }
     }
     if pads.is_empty() {
-        return Err(format!("pad_layer {:?} has no nodes in the DEF power grid", job.pad_layer));
+        return Err(format!(
+            "pad_layer {:?} has no nodes in the DEF power grid",
+            job.pad_layer
+        ));
     }
 
     // load nodes = the lowest non-pad metal layer (where cells tap the supply rails).
@@ -278,5 +295,13 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
         loads = lnodes.iter().map(|(n, _, _)| (n.clone(), per)).collect();
     }
 
-    Ok(PdnSpec { vdd: job.vdd, pads, resistors, loads, switches, caps, ..Default::default() })
+    Ok(PdnSpec {
+        vdd: job.vdd,
+        pads,
+        resistors,
+        loads,
+        switches,
+        caps,
+        ..Default::default()
+    })
 }

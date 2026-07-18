@@ -152,7 +152,9 @@ pub fn analyze(spec: &PdnSpec) -> Result<EmIrReport, EmIrError> {
     sys.diag.clone_from(&base_diag);
     sys.offdiag.clone_from(&offdiag);
     sys.rhs = pad_rhs.iter().zip(&dc).map(|(p, d)| p - d).collect();
-    let x = sys.solve(50_000, 1e-8).map_err(|e| EmIrError::Solver(e.to_string()))?;
+    let x = sys
+        .solve(50_000, 1e-8)
+        .map_err(|e| EmIrError::Solver(e.to_string()))?;
 
     let voltage = |n: &str| -> f64 {
         if let Some(&v) = pad_v.get(n) {
@@ -167,8 +169,17 @@ pub fn analyze(spec: &PdnSpec) -> Result<EmIrReport, EmIrError> {
     for (name, &i) in &free_idx {
         let v = x[i];
         let drop = spec.vdd - v;
-        let cand = IrNode { node: name.clone(), voltage: v, drop, drop_pct: 100.0 * drop / spec.vdd };
-        if worst_ir.as_ref().map(|w| cand.drop > w.drop).unwrap_or(true) {
+        let cand = IrNode {
+            node: name.clone(),
+            voltage: v,
+            drop,
+            drop_pct: 100.0 * drop / spec.vdd,
+        };
+        if worst_ir
+            .as_ref()
+            .map(|w| cand.drop > w.drop)
+            .unwrap_or(true)
+        {
             worst_ir = Some(cand);
         }
     }
@@ -207,7 +218,17 @@ pub fn analyze(spec: &PdnSpec) -> Result<EmIrReport, EmIrError> {
     // also returns each segment's RMS and peak current, checked against the LEF AC
     // current-density limits — the EM the DC-average check can't see.
     let dynamic = if spec.is_dynamic() && n > 0 {
-        let tr = transient(spec, &free_idx, &free_names, &base_diag, &offdiag, &pad_rhs, &cap, &dc, &x)?;
+        let tr = transient(
+            spec,
+            &free_idx,
+            &free_names,
+            &base_diag,
+            &offdiag,
+            &pad_rhs,
+            &cap,
+            &dc,
+            &x,
+        )?;
         for (ri, r) in spec.resistors.iter().enumerate() {
             let Some(layer) = &r.layer else { continue };
             for (kind, cur, lim) in [
@@ -290,8 +311,16 @@ fn transient(
 ) -> Result<TransientResult, EmIrError> {
     let n = free_names.len();
     let pad_v: HashMap<&str, f64> = spec.pads.iter().map(|(s, v)| (s.as_str(), *v)).collect();
-    let last = spec.switches.iter().map(|s| s.t50_ns + s.dur_ns).fold(0.0, f64::max);
-    let min_dur = spec.switches.iter().map(|s| s.dur_ns).fold(f64::INFINITY, f64::min);
+    let last = spec
+        .switches
+        .iter()
+        .map(|s| s.t50_ns + s.dur_ns)
+        .fold(0.0, f64::max);
+    let min_dur = spec
+        .switches
+        .iter()
+        .map(|s| s.dur_ns)
+        .fold(f64::INFINITY, f64::min);
     let dt_ns = (min_dur / 10.0).max(1e-3); // resolve the pulse; >= 1 ps
     let tstop_ns = last + 1.0; // a little settle past the last event
     let dt = dt_ns * 1e-9;
@@ -318,7 +347,9 @@ fn transient(
                 sys.rhs[k] -= switch_current(sw, t_ns, spec.vdd);
             }
         }
-        let v = sys.solve(50_000, 1e-8).map_err(|e| EmIrError::Solver(e.to_string()))?;
+        let v = sys
+            .solve(50_000, 1e-8)
+            .map_err(|e| EmIrError::Solver(e.to_string()))?;
         for k in 0..n {
             if v[k] < vmin[k] {
                 vmin[k] = v[k];
@@ -326,7 +357,12 @@ fn transient(
             }
         }
         // segment currents at this timestep
-        let nodev = |name: &str| pad_v.get(name).copied().unwrap_or_else(|| v[free_idx[name]]);
+        let nodev = |name: &str| {
+            pad_v
+                .get(name)
+                .copied()
+                .unwrap_or_else(|| v[free_idx[name]])
+        };
         for (ri, r) in spec.resistors.iter().enumerate() {
             let i = (nodev(&r.a) - nodev(&r.b)) / r.r;
             sum_i2[ri] += i * i;
@@ -336,10 +372,20 @@ fn transient(
         v_prev = v;
     }
 
-    let rms: Vec<f64> =
-        sum_i2.iter().map(|s| if steps > 0 { (s / steps as f64).sqrt() } else { 0.0 }).collect();
+    let rms: Vec<f64> = sum_i2
+        .iter()
+        .map(|s| {
+            if steps > 0 {
+                (s / steps as f64).sqrt()
+            } else {
+                0.0
+            }
+        })
+        .collect();
 
-    let worst = (0..n).min_by(|&a, &b| vmin[a].total_cmp(&vmin[b])).unwrap_or(0);
+    let worst = (0..n)
+        .min_by(|&a, &b| vmin[a].total_cmp(&vmin[b]))
+        .unwrap_or(0);
     let v = vmin[worst];
     let drop = spec.vdd - v;
     Ok(TransientResult {

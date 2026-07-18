@@ -27,7 +27,10 @@ fn example_block_analyzes_clean() {
 #[test]
 fn pi_met_covers_em_not_just_ir() {
     let (job, rep) = vyges_em_ir::engine::demo();
-    assert!(!rep.em_violations.is_empty(), "demo should carry EM violations");
+    assert!(
+        !rep.em_violations.is_empty(),
+        "demo should carry EM violations"
+    );
     assert!(!passes(&job, &rep));
 
     let j = report_json(&job, &rep);
@@ -39,5 +42,8 @@ fn pi_met_covers_em_not_just_ir() {
     relaxed.ir_limit_pct = 100.0;
     let j = report_json(&relaxed, &rep);
     assert!(j.contains("\"ir_met\":true"), "IR now within limit: {j}");
-    assert!(j.contains("\"pi_met\":false"), "EM violations must still fail the verdict: {j}");
+    assert!(
+        j.contains("\"pi_met\":false"),
+        "EM violations must still fail the verdict: {j}"
+    );
 }

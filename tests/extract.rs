@@ -80,12 +80,21 @@ fn lef_layer_resistance() {
 
 #[test]
 fn extracts_network_with_correct_resistances() {
-    let spec = extract(&Def::parse(DEF).unwrap(), &TechLef::parse(LEF).unwrap(), &job()).unwrap();
+    let spec = extract(
+        &Def::parse(DEF).unwrap(),
+        &TechLef::parse(LEF).unwrap(),
+        &job(),
+    )
+    .unwrap();
     assert_eq!(spec.resistors.len(), 8, "4 wire + 4 via resistors");
     assert_eq!(spec.pads.len(), 4, "4 met5 corner nodes are pads");
     // every wire stripe is 10um/1um * 0.1 ohm/sq = 1.0 ohm
-    let wires: Vec<&f64> =
-        spec.resistors.iter().filter(|r| r.layer.as_deref() != Some("via")).map(|r| &r.r).collect();
+    let wires: Vec<&f64> = spec
+        .resistors
+        .iter()
+        .filter(|r| r.layer.as_deref() != Some("via"))
+        .map(|r| &r.r)
+        .collect();
     assert_eq!(wires.len(), 4);
     for r in wires {
         assert!((r - 1.0).abs() < 1e-9, "stripe R = 1.0 ohm, got {r}");
@@ -129,17 +138,29 @@ fn parses_components_placements() {
 fn splits_stripe_at_mid_segment_via_and_bridges() {
     let mut j = job();
     j.total_current = 0.001;
-    let spec = extract(&Def::parse(STACK_DEF).unwrap(), &TechLef::parse(LEF).unwrap(), &j).unwrap();
+    let spec = extract(
+        &Def::parse(STACK_DEF).unwrap(),
+        &TechLef::parse(LEF).unwrap(),
+        &j,
+    )
+    .unwrap();
     // met5 stripe (0..20um) split at the via (0,10um) -> two 10um/1um = 1 ohm wires,
     // plus one via resistor met4<->met5 at the mid point.
-    let met5: Vec<f64> =
-        spec.resistors.iter().filter(|r| r.layer.as_deref() == Some("met5")).map(|r| r.r).collect();
+    let met5: Vec<f64> = spec
+        .resistors
+        .iter()
+        .filter(|r| r.layer.as_deref() == Some("met5"))
+        .map(|r| r.r)
+        .collect();
     assert_eq!(met5.len(), 2, "stripe split at the mid-segment via");
     for r in &met5 {
         assert!((r - 1.0).abs() < 1e-9, "each half = 1 ohm, got {r}");
     }
     assert_eq!(
-        spec.resistors.iter().filter(|r| r.layer.as_deref() == Some("via")).count(),
+        spec.resistors
+            .iter()
+            .filter(|r| r.layer.as_deref() == Some("via"))
+            .count(),
         1,
         "one via bridges met4<->met5 at the landing"
     );
@@ -154,10 +175,19 @@ fn splits_stripe_at_mid_segment_via_and_bridges() {
 
 #[test]
 fn solves_ir_on_extracted_grid() {
-    let spec = extract(&Def::parse(DEF).unwrap(), &TechLef::parse(LEF).unwrap(), &job()).unwrap();
+    let spec = extract(
+        &Def::parse(DEF).unwrap(),
+        &TechLef::parse(LEF).unwrap(),
+        &job(),
+    )
+    .unwrap();
     let rep = analyze(&spec).unwrap();
     // each met4 node: 1 mA through its 1-ohm via to a vdd pad (the inter-node stripe
     // carries ~0 by symmetry) -> 1 mV droop.
     let w = rep.worst_ir.unwrap();
-    assert!((w.drop - 0.001).abs() < 5e-5, "extracted-grid IR drop ~1 mV, got {}", w.drop);
+    assert!(
+        (w.drop - 0.001).abs() < 5e-5,
+        "extracted-grid IR drop ~1 mV, got {}",
+        w.drop
+    );
 }

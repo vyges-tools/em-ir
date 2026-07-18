@@ -97,7 +97,10 @@ fn num(tok: Option<&str>, what: &str) -> Result<f64, PdnError> {
 
 impl PdnSpec {
     pub fn parse(text: &str) -> Result<PdnSpec, PdnError> {
-        let mut spec = PdnSpec { vdd: 0.0, ..Default::default() };
+        let mut spec = PdnSpec {
+            vdd: 0.0,
+            ..Default::default()
+        };
         let mut pads_raw: Vec<(String, Option<f64>)> = Vec::new();
         for raw in text.lines() {
             let toks: Vec<&str> = strip_comment(raw).split_whitespace().collect();
@@ -107,7 +110,9 @@ impl PdnSpec {
             match toks[0] {
                 "vdd" => spec.vdd = num(toks.get(1).copied(), "vdd")?,
                 "pad" => {
-                    let node = toks.get(1).ok_or_else(|| PdnError("pad needs a node".into()))?;
+                    let node = toks
+                        .get(1)
+                        .ok_or_else(|| PdnError("pad needs a node".into()))?;
                     let v = match toks.get(2) {
                         Some(t) => Some(num(Some(t), "pad voltage")?),
                         None => None,
@@ -115,8 +120,12 @@ impl PdnSpec {
                     pads_raw.push((node.to_string(), v));
                 }
                 "res" | "via" => {
-                    let a = toks.get(1).ok_or_else(|| PdnError("res needs node a".into()))?;
-                    let b = toks.get(2).ok_or_else(|| PdnError("res needs node b".into()))?;
+                    let a = toks
+                        .get(1)
+                        .ok_or_else(|| PdnError("res needs node a".into()))?;
+                    let b = toks
+                        .get(2)
+                        .ok_or_else(|| PdnError("res needs node b".into()))?;
                     let r = num(toks.get(3).copied(), "res ohms")?;
                     if r <= 0.0 {
                         return Err(PdnError(format!("res {a}-{b}: resistance must be > 0")));
@@ -137,22 +146,30 @@ impl PdnSpec {
                     });
                 }
                 "load" => {
-                    let node = toks.get(1).ok_or_else(|| PdnError("load needs a node".into()))?;
+                    let node = toks
+                        .get(1)
+                        .ok_or_else(|| PdnError("load needs a node".into()))?;
                     let i = num(toks.get(2).copied(), "load amps")?;
                     spec.loads.push((node.to_string(), i));
                 }
                 "emlimit" => {
-                    let layer = toks.get(1).ok_or_else(|| PdnError("emlimit needs a layer".into()))?;
+                    let layer = toks
+                        .get(1)
+                        .ok_or_else(|| PdnError("emlimit needs a layer".into()))?;
                     let lim = num(toks.get(2).copied(), "emlimit amps")?;
                     spec.em_limits.insert(layer.to_string(), lim);
                 }
                 "cap" => {
-                    let node = toks.get(1).ok_or_else(|| PdnError("cap needs a node".into()))?;
+                    let node = toks
+                        .get(1)
+                        .ok_or_else(|| PdnError("cap needs a node".into()))?;
                     let c = num(toks.get(2).copied(), "cap pF")?;
                     spec.caps.push((node.to_string(), c));
                 }
                 "switch" => {
-                    let node = toks.get(1).ok_or_else(|| PdnError("switch needs a node".into()))?;
+                    let node = toks
+                        .get(1)
+                        .ok_or_else(|| PdnError("switch needs a node".into()))?;
                     let energy = num(toks.get(2).copied(), "switch energy(pJ)")?;
                     let t50 = num(toks.get(3).copied(), "switch t50(ns)")?;
                     let dur = match toks.get(4) {
@@ -181,7 +198,10 @@ impl PdnSpec {
         if spec.resistors.is_empty() {
             return Err(PdnError("at least one resistor is required".into()));
         }
-        spec.pads = pads_raw.into_iter().map(|(n, v)| (n, v.unwrap_or(spec.vdd))).collect();
+        spec.pads = pads_raw
+            .into_iter()
+            .map(|(n, v)| (n, v.unwrap_or(spec.vdd)))
+            .collect();
         Ok(spec)
     }
 

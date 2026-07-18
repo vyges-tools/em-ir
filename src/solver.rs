@@ -18,15 +18,18 @@ pub struct LinSys {
 
 #[derive(Debug)]
 pub enum SolveError {
-    Singular(usize),       // node index with zero diagonal (floating)
-    NotConverged(f64),     // residual after the iteration cap
+    Singular(usize),   // node index with zero diagonal (floating)
+    NotConverged(f64), // residual after the iteration cap
 }
 
 impl std::fmt::Display for SolveError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SolveError::Singular(k) => {
-                write!(f, "singular PDN: node index {k} has no resistive path (floating)")
+                write!(
+                    f,
+                    "singular PDN: node index {k} has no resistive path (floating)"
+                )
             }
             SolveError::NotConverged(r) => write!(f, "solver did not converge (residual {r:.3e})"),
         }
@@ -36,7 +39,12 @@ impl std::error::Error for SolveError {}
 
 impl LinSys {
     pub fn new(n: usize) -> LinSys {
-        LinSys { n, diag: vec![0.0; n], offdiag: vec![Vec::new(); n], rhs: vec![0.0; n] }
+        LinSys {
+            n,
+            diag: vec![0.0; n],
+            offdiag: vec![Vec::new(); n],
+            rhs: vec![0.0; n],
+        }
     }
 
     /// Solve via Gauss-Seidel. `tol` is the max per-node update; `max_iter` caps work.

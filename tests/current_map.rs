@@ -84,7 +84,13 @@ fn current_map_lands_per_instance_current_verbatim() {
     )
     .unwrap();
     // 1 mA at g1's node (met4_0_0), 0.2 mA at g2's (met4_10000_0)
-    let at = |n: &str| spec.loads.iter().find(|(node, _)| node == n).map(|(_, c)| *c).unwrap_or(0.0);
+    let at = |n: &str| {
+        spec.loads
+            .iter()
+            .find(|(node, _)| node == n)
+            .map(|(_, c)| *c)
+            .unwrap_or(0.0)
+    };
     assert!((at("met4_0_0") - 1.0e-3).abs() < 1e-9, "g1 -> 1 mA");
     assert!((at("met4_10000_0") - 2.0e-4).abs() < 1e-9, "g2 -> 0.2 mA");
 }
@@ -96,7 +102,10 @@ fn current_map_overrides_activity() {
     let cmap = tmp("emir_cm2.map", "g1 5.0e-4\ng2 5.0e-4\n");
     let a = total_load(&cmap, 0.1, "");
     let b = total_load(&cmap, 0.9, "");
-    assert!((a - b).abs() < 1e-12, "activity no longer changes the static current");
+    assert!(
+        (a - b).abs() < 1e-12,
+        "activity no longer changes the static current"
+    );
     assert!((a - 1.0e-3).abs() < 1e-9, "0.5 mA + 0.5 mA");
 }
 
@@ -109,5 +118,8 @@ fn measured_map_lower_than_worstcase_map() {
     let tw = total_load(&worst, 1.0, "");
     let tm = total_load(&measured, 1.0, "");
     assert!(tm < tw, "measured load {tm} < worst-case {tw}");
-    assert!(tw / tm > 3.0, "worst-case overpredicts the injected current by >3x here");
+    assert!(
+        tw / tm > 3.0,
+        "worst-case overpredicts the injected current by >3x here"
+    );
 }

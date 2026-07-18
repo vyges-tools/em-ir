@@ -6,10 +6,9 @@ use vyges_em_ir::pdn::PdnSpec;
 
 #[test]
 fn parses_cap_and_switch() {
-    let s = PdnSpec::parse(
-        "vdd 1.8\npad p\nres p n1 0.5 met1\ncap n1 0.5\nswitch n1 1.8 1.0 0.1\n",
-    )
-    .unwrap();
+    let s =
+        PdnSpec::parse("vdd 1.8\npad p\nres p n1 0.5 met1\ncap n1 0.5\nswitch n1 1.8 1.0 0.1\n")
+            .unwrap();
     assert!(s.is_dynamic());
     assert_eq!(s.caps, vec![("n1".to_string(), 0.5)]);
     assert_eq!(s.switches.len(), 1);
@@ -24,7 +23,10 @@ fn no_switches_means_static_only() {
     let s = PdnSpec::parse("vdd 1.8\npad p\nres p n1 0.5\nload n1 0.1\n").unwrap();
     assert!(!s.is_dynamic());
     let rep = analyze(&s).unwrap();
-    assert!(rep.dynamic.is_none(), "no transient without switching events");
+    assert!(
+        rep.dynamic.is_none(),
+        "no transient without switching events"
+    );
 }
 
 #[test]
@@ -38,8 +40,15 @@ fn dynamic_droop_present_and_exceeds_static() {
     assert!(stat < 1e-6, "no static load -> ~0 static drop, got {stat}");
     let d = rep.dynamic.expect("dynamic analysis ran");
     assert!(d.drop > stat, "dynamic droop must exceed static");
-    assert!((d.drop - 0.01).abs() < 2e-3, "peak droop ~ ipk*R = 0.01 V, got {}", d.drop);
-    assert!((d.time_ns - 1.0).abs() < 0.05, "worst droop near the switch peak (1 ns)");
+    assert!(
+        (d.drop - 0.01).abs() < 2e-3,
+        "peak droop ~ ipk*R = 0.01 V, got {}",
+        d.drop
+    );
+    assert!(
+        (d.time_ns - 1.0).abs() < 0.05,
+        "worst droop near the switch peak (1 ns)"
+    );
     assert_eq!(d.node, "n1");
 }
 
@@ -47,7 +56,18 @@ fn dynamic_droop_present_and_exceeds_static() {
 fn decap_reduces_droop() {
     let no_cap = "vdd 1.8\npad p\nres p n1 0.5\nswitch n1 1.8 1.0 0.1\n";
     let with_cap = "vdd 1.8\npad p\nres p n1 0.5\ncap n1 100\nswitch n1 1.8 1.0 0.1\n";
-    let d0 = analyze(&PdnSpec::parse(no_cap).unwrap()).unwrap().dynamic.unwrap().drop;
-    let d1 = analyze(&PdnSpec::parse(with_cap).unwrap()).unwrap().dynamic.unwrap().drop;
-    assert!(d1 < d0, "a large decap should reduce the dynamic droop ({d1} < {d0})");
+    let d0 = analyze(&PdnSpec::parse(no_cap).unwrap())
+        .unwrap()
+        .dynamic
+        .unwrap()
+        .drop;
+    let d1 = analyze(&PdnSpec::parse(with_cap).unwrap())
+        .unwrap()
+        .dynamic
+        .unwrap()
+        .drop;
+    assert!(
+        d1 < d0,
+        "a large decap should reduce the dynamic droop ({d1} < {d0})"
+    );
 }

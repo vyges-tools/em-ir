@@ -68,7 +68,12 @@ fn job(power_map: String, decap_map: String) -> EmIrJob {
 fn decap_cell_lands_capacitance_at_nearest_rail_node() {
     let pmap = tmp("emir_pwr.map", "INVX 0.02\n");
     let dmap = tmp("emir_decap.map", "DECAP 0.5\n");
-    let spec = extract(&Def::parse(DEF).unwrap(), &TechLef::parse(LEF).unwrap(), &job(pmap, dmap)).unwrap();
+    let spec = extract(
+        &Def::parse(DEF).unwrap(),
+        &TechLef::parse(LEF).unwrap(),
+        &job(pmap, dmap),
+    )
+    .unwrap();
     // the decap (at x=9um) lands on the nearest rail node, met4_10000_0
     assert_eq!(spec.caps.len(), 1, "one placed decap");
     assert_eq!(spec.caps[0].0, "met4_10000_0");
@@ -82,6 +87,14 @@ fn decap_cell_lands_capacitance_at_nearest_rail_node() {
 #[test]
 fn no_decap_map_means_no_caps() {
     let pmap = tmp("emir_pwr2.map", "INVX 0.02\n");
-    let spec = extract(&Def::parse(DEF).unwrap(), &TechLef::parse(LEF).unwrap(), &job(pmap, String::new())).unwrap();
-    assert!(spec.caps.is_empty(), "no decap_map -> no placed capacitance");
+    let spec = extract(
+        &Def::parse(DEF).unwrap(),
+        &TechLef::parse(LEF).unwrap(),
+        &job(pmap, String::new()),
+    )
+    .unwrap();
+    assert!(
+        spec.caps.is_empty(),
+        "no decap_map -> no placed capacitance"
+    );
 }

@@ -79,7 +79,11 @@ pub fn render_report(job: &EmIrJob, rep: &EmIrReport) -> String {
     ));
     match &rep.worst_ir {
         Some(w) => {
-            let verdict = if w.drop_pct <= job.ir_limit_pct { "MET" } else { "VIOLATED" };
+            let verdict = if w.drop_pct <= job.ir_limit_pct {
+                "MET"
+            } else {
+                "VIOLATED"
+            };
             s.push_str(&format!(
                 "  worst IR drop: {:.4} V ({:.2}%) at {}   [Vmin {:.4} V]   [{}]\n",
                 w.drop, w.drop_pct, w.node, w.voltage, verdict
@@ -88,7 +92,11 @@ pub fn render_report(job: &EmIrJob, rep: &EmIrReport) -> String {
         None => s.push_str("  worst IR drop: (no free nodes)\n"),
     }
     if let Some(d) = &rep.dynamic {
-        let verdict = if d.drop_pct <= job.ir_limit_pct { "MET" } else { "VIOLATED" };
+        let verdict = if d.drop_pct <= job.ir_limit_pct {
+            "MET"
+        } else {
+            "VIOLATED"
+        };
         s.push_str(&format!(
             "  worst DYNAMIC droop: {:.4} V ({:.2}%) at {} @ {:.3} ns   [Vmin {:.4} V]   [{}]\n",
             d.drop, d.drop_pct, d.node, d.time_ns, d.voltage, verdict
@@ -113,7 +121,11 @@ pub fn render_report(job: &EmIrJob, rep: &EmIrReport) -> String {
             "kind", "ratio", "current", "limit"
         ));
         let mut v = rep.em_violations.clone();
-        v.sort_by(|a, b| b.ratio.partial_cmp(&a.ratio).unwrap_or(std::cmp::Ordering::Equal));
+        v.sort_by(|a, b| {
+            b.ratio
+                .partial_cmp(&a.ratio)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         for e in &v {
             s.push_str(&format!(
                 "    {:>4}  {:5.2}x  {:8.4}A  {:7.3}  {:5}  {}-{}\n",
@@ -126,7 +138,10 @@ pub fn render_report(job: &EmIrJob, rep: &EmIrReport) -> String {
 
 pub fn report_json(job: &EmIrJob, rep: &EmIrReport) -> String {
     let mut s = String::new();
-    s.push_str(&format!("{{\"design\":{:?},\"vdd\":{:.6},\"nodes\":{},", job.design, rep.vdd, rep.nodes));
+    s.push_str(&format!(
+        "{{\"design\":{:?},\"vdd\":{:.6},\"nodes\":{},",
+        job.design, rep.vdd, rep.nodes
+    ));
     match &rep.worst_ir {
         Some(w) => s.push_str(&format!(
             "\"worst_ir\":{{\"node\":{:?},\"voltage\":{:.6},\"drop\":{:.6},\"drop_pct\":{:.4}}},",

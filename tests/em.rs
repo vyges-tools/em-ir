@@ -63,10 +63,22 @@ fn lef_dc_current_density_parsed() {
 
 #[test]
 fn extract_sets_width_based_em_limit() {
-    let spec = extract(&Def::parse(DEF).unwrap(), &TechLef::parse(LEF).unwrap(), &job()).unwrap();
+    let spec = extract(
+        &Def::parse(DEF).unwrap(),
+        &TechLef::parse(LEF).unwrap(),
+        &job(),
+    )
+    .unwrap();
     // met4 wire: 1.0 mA/um × 1.0 um = 1.0 mA = 0.001 A
-    let met4 = spec.resistors.iter().find(|r| r.layer.as_deref() == Some("met4")).unwrap();
-    assert!((met4.em_limit.unwrap() - 0.001).abs() < 1e-12, "limit = jmax·width");
+    let met4 = spec
+        .resistors
+        .iter()
+        .find(|r| r.layer.as_deref() == Some("met4"))
+        .unwrap();
+    assert!(
+        (met4.em_limit.unwrap() - 0.001).abs() < 1e-12,
+        "limit = jmax·width"
+    );
 }
 
 #[test]
@@ -90,7 +102,10 @@ fn per_segment_em_violation_flagged() {
     let rep = analyze(&spec).unwrap();
     assert_eq!(rep.em_checked, 1);
     assert_eq!(rep.em_violations.len(), 1);
-    assert!((rep.em_violations[0].ratio - 2.0).abs() < 1e-6, "2 mA / 1 mA = 2x");
+    assert!(
+        (rep.em_violations[0].ratio - 2.0).abs() < 1e-6,
+        "2 mA / 1 mA = 2x"
+    );
     assert!((rep.em_worst_ratio - 2.0).abs() < 1e-6);
 }
 
@@ -108,7 +123,12 @@ fn rms_spec(rms_limit: f64) -> PdnSpec {
             em_peak_limit: None,
         }],
         // a switching pulse draws current through the segment for the transient
-        switches: vec![Switch { node: "n1".into(), energy_pj: 1.0, t50_ns: 1.0, dur_ns: 0.1 }],
+        switches: vec![Switch {
+            node: "n1".into(),
+            energy_pj: 1.0,
+            t50_ns: 1.0,
+            dur_ns: 0.1,
+        }],
         ..Default::default()
     }
 }
@@ -118,10 +138,17 @@ fn rms_em_from_transient_flags_over_limit() {
     // a tiny RMS limit -> the segment's transient RMS current is over it (kind "rms")
     let rep = analyze(&rms_spec(0.0002)).unwrap();
     assert!(rep.dynamic.is_some(), "transient ran");
-    let rms: Vec<_> = rep.em_violations.iter().filter(|v| v.kind == "rms").collect();
+    let rms: Vec<_> = rep
+        .em_violations
+        .iter()
+        .filter(|v| v.kind == "rms")
+        .collect();
     assert_eq!(rms.len(), 1, "RMS current over the limit");
     assert!(rms[0].ratio > 1.0);
     // a generous limit -> no RMS violation
     let rep2 = analyze(&rms_spec(0.05)).unwrap();
-    assert!(rep2.em_violations.iter().all(|v| v.kind != "rms"), "RMS met with a large limit");
+    assert!(
+        rep2.em_violations.iter().all(|v| v.kind != "rms"),
+        "RMS met with a large limit"
+    );
 }

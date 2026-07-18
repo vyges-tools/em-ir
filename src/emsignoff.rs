@@ -72,11 +72,11 @@ pub fn screen(geom: &EmGeom, lef: &Lef, cur: &CurrentMap) -> EmIrReport {
 
     // one screen against a (limit-density mA/µm, current mA) pair
     let check = |kind: &str,
-                     seg: &vyges_loom::emgeom::SegGeom,
-                     jmax_ma_um: f64,
-                     cur_ma: Option<f64>,
-                     viols: &mut Vec<EmViolation>,
-                     worst: &mut f64| {
+                 seg: &vyges_loom::emgeom::SegGeom,
+                 jmax_ma_um: f64,
+                 cur_ma: Option<f64>,
+                 viols: &mut Vec<EmViolation>,
+                 worst: &mut f64| {
         if jmax_ma_um <= 0.0 {
             return false; // no limit on this layer for this kind
         }
@@ -86,7 +86,11 @@ pub fn screen(geom: &EmGeom, lef: &Lef, cur: &CurrentMap) -> EmIrReport {
         };
         let limit_a = jmax_ma_um * seg.width_um * 1e-3;
         let current_a = cur_ma * 1e-3;
-        let ratio = if limit_a > 0.0 { current_a / limit_a } else { 0.0 };
+        let ratio = if limit_a > 0.0 {
+            current_a / limit_a
+        } else {
+            0.0
+        };
         if ratio > *worst {
             *worst = ratio;
         }
@@ -109,13 +113,29 @@ pub fn screen(geom: &EmGeom, lef: &Lef, cur: &CurrentMap) -> EmIrReport {
             Some(l) => l,
             None => continue, // layer not in LEF → cannot screen
         };
-        let net_avg = cur.avg.get(&seg.net).copied().or({
-            (cur.default_avg_ma > 0.0).then_some(cur.default_avg_ma)
-        });
+        let net_avg = cur
+            .avg
+            .get(&seg.net)
+            .copied()
+            .or({ (cur.default_avg_ma > 0.0).then_some(cur.default_avg_ma) });
         let dc_checked = check("dc", seg, layer.dc_jmax, net_avg, &mut viols, &mut worst);
         // AC screens only when the net has an RMS/peak current supplied
-        check("rms", seg, layer.ac_rms, cur.rms.get(&seg.net).copied(), &mut viols, &mut worst);
-        check("peak", seg, layer.ac_peak, cur.peak.get(&seg.net).copied(), &mut viols, &mut worst);
+        check(
+            "rms",
+            seg,
+            layer.ac_rms,
+            cur.rms.get(&seg.net).copied(),
+            &mut viols,
+            &mut worst,
+        );
+        check(
+            "peak",
+            seg,
+            layer.ac_peak,
+            cur.peak.get(&seg.net).copied(),
+            &mut viols,
+            &mut worst,
+        );
         if dc_checked {
             checked += 1;
         }
@@ -151,9 +171,25 @@ mod tests {
             design: "t".into(),
             segs: vec![
                 // met1, 0.14 µm wide → limit = 1.5*0.14 = 0.21 mA
-                SegGeom { net: "clk".into(), a: "clk".into(), b: "clk^met1".into(), layer: "met1".into(), width_um: 0.14, length_um: 10.0, res_ohm: 9.0 },
+                SegGeom {
+                    net: "clk".into(),
+                    a: "clk".into(),
+                    b: "clk^met1".into(),
+                    layer: "met1".into(),
+                    width_um: 0.14,
+                    length_um: 10.0,
+                    res_ohm: 9.0,
+                },
                 // met2, 0.20 µm wide → limit = 2.0*0.20 = 0.40 mA
-                SegGeom { net: "clk".into(), a: "clk".into(), b: "clk^met2".into(), layer: "met2".into(), width_um: 0.20, length_um: 4.0, res_ohm: 2.5 },
+                SegGeom {
+                    net: "clk".into(),
+                    a: "clk".into(),
+                    b: "clk^met2".into(),
+                    layer: "met2".into(),
+                    width_um: 0.20,
+                    length_um: 4.0,
+                    res_ohm: 2.5,
+                },
             ],
         }
     }
