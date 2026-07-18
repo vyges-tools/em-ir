@@ -295,6 +295,10 @@ fn main() {
         const DESCRIBE: &str = r#"{
   "name": "em-ir",
   "summary": "EM / IR-drop power-integrity sign-off (PDN -> report)",
+  "maturity": "workflow-validated",
+  "provenance_limitations": [
+      "The job names the PDN or DEF/LEF and any power and decap maps; input_hash covers the job path and arguments, not their contents."
+  ],
   "invocation": {
     "args_template": ["run", "{job}"],
     "optional": [ { "arg": "out", "flag": "-o" } ],
