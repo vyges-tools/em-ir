@@ -293,6 +293,7 @@ fn main() {
     if args.iter().any(|a| a == "--describe") {
         // Machine-readable description of `run` for tooling that drives it.
         const DESCRIBE: &str = r#"{
+  "schema": "vyges-tool-descriptor/1.1",
   "name": "em-ir",
   "summary": "EM / IR-drop power-integrity sign-off (PDN -> report)",
   "maturity": "workflow-validated",
