@@ -190,8 +190,17 @@ Comparing against PDNSim's source and its own network on the same design:
   worst drop 0.27 % under the old model against 0.06 % under the declared pin. Which
   way that runs is **design-dependent** — it turns on how much of the grid a pin
   happens to cover — so it is measured per design rather than assumed.
-- **Instance current placement still differs.** An instance's current lands wholly on the
-  nearest rail node; PDNSim splits it evenly across every node the instance touches.
+- **Voltages do not yet agree: this engine under-reports IR drop by ~3.2×.** Fed the
+  same per-instance currents PDNSim used, on the same block, worst drop came out
+  4.13e-05 V against PDNSim's 1.32e-04 V. Under-reporting is the dangerous
+  direction for a checker, so treat a clean IR verdict here as unproven.
+- **The cause is where current enters the grid, not the resistance.** Instance
+  current lands wholly on the nearest rail node, and this engine places nodes only
+  at polyline points — so 15 704 current-carrying instances collapse onto 834
+  injection nodes, and a standard-cell rail is one long resistor (750 met1
+  resistors averaging 29.9 Ω) where PDNSim has 32 603 averaging 0.685 Ω for the
+  same total. Current injected at a rail's end never crosses the rail resistance
+  the cell actually sits behind.
 
 Node counts are not comparable with PDNSim by construction: it resamples nodes on a
 minimum pitch, we place one per polyline point.

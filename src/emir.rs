@@ -75,7 +75,40 @@ pub struct EmIrReport {
     pub dynamic: Option<DynIr>,
 }
 
-pub fn analyze(spec: &PdnSpec) -> Result<EmIrReport, EmIrError> {
+/// Every free node's solved voltage, as `(node name, volts)`.
+///
+/// The report keeps only the worst node, which is the verdict but not the evidence. Correlating
+/// against another IR solver needs the whole field — one row per node, joinable by position —
+/// and so does any heat map or hotspot view. Same static solve `analyze` runs, so the two cannot
+/// drift apart.
+///
+/// Pad nodes are excluded: they are held at the supply by definition and carry no information.
+pub fn node_voltages(spec: &PdnSpec) -> Result<Vec<(String, f64)>, EmIrError> {
+    let a = assemble(spec);
+    let mut sys = LinSys::new(a.free_names.len());
+    sys.diag.clone_from(&a.base_diag);
+    sys.offdiag.clone_from(&a.offdiag);
+    sys.rhs = a.pad_rhs.iter().zip(&a.dc).map(|(p, d)| p - d).collect();
+    let x = sys
+        .solve(50_000, 1e-8)
+        .map_err(|e| EmIrError::Solver(e.to_string()))?;
+    Ok(a.free_names.into_iter().zip(x).collect())
+}
+
+/// The assembled conductance system, before any solve.
+struct Assembled {
+    free_idx: HashMap<String, usize>,
+    free_names: Vec<String>,
+    base_diag: Vec<f64>,
+    offdiag: Vec<Vec<(usize, f64)>>,
+    pad_rhs: Vec<f64>,
+    dc: Vec<f64>,
+    cap: Vec<f64>,
+}
+
+/// Build the reduced free-node system: pads are fixed-voltage boundaries folded into the
+/// diagonal and rhs, loads inject current out of their node, caps are held for the transient.
+fn assemble(spec: &PdnSpec) -> Assembled {
     let pad_v: HashMap<&str, f64> = spec.pads.iter().map(|(n, v)| (n.as_str(), *v)).collect();
 
     // free nodes = every node that is not a pad
@@ -146,6 +179,30 @@ pub fn analyze(spec: &PdnSpec) -> Result<EmIrReport, EmIrError> {
             cap[i] += c * 1e-12;
         }
     }
+
+    Assembled {
+        free_idx,
+        free_names,
+        base_diag,
+        offdiag,
+        pad_rhs,
+        dc,
+        cap,
+    }
+}
+
+pub fn analyze(spec: &PdnSpec) -> Result<EmIrReport, EmIrError> {
+    let pad_v: HashMap<&str, f64> = spec.pads.iter().map(|(n, v)| (n.as_str(), *v)).collect();
+    let Assembled {
+        free_idx,
+        free_names,
+        base_diag,
+        offdiag,
+        pad_rhs,
+        dc,
+        cap,
+    } = assemble(spec);
+    let n = free_names.len();
 
     // static solve: base conductances, rhs = pad injections − static load current.
     let mut sys = LinSys::new(n);
