@@ -223,20 +223,61 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
         }
     }
 
-    // pads: every node on the supply (pad) layer is held at vdd.
+    // Supply sources: the grid nodes the design's own power PIN covers.
+    //
+    // A DEF `PINS` entry states where supply actually enters the die — port rectangles on
+    // one or more layers, placed and oriented. Every grid node inside one of those shapes is
+    // held at vdd; everything else has to be reached THROUGH the grid.
+    //
+    // The fallback, when a design declares no power pin, is every node on `pad_layer`. That
+    // is deliberately the same precedence PDNSim uses (`generateSourceNodes`: an explicit
+    // source file, else the net's bterms, else all top-layer nodes), and the fallback is the
+    // weaker model: holding a whole layer ideal deletes resistance the supply really crosses,
+    // so it UNDER-reports IR drop. On the sky130 block used for the PDNSim correlation the
+    // design declares 9 port rectangles across met4 and met5 where the fallback would have
+    // held all 28 met5 nodes — so this is not a corner case.
     let mut pads: Vec<(String, f64)> = Vec::new();
     let mut seen_pad: BTreeSet<String> = BTreeSet::new();
-    for ((x, y), layers) in &at_point {
-        if layers.contains(&job.pad_layer) {
-            let n = node(&job.pad_layer, *x, *y);
-            if seen_pad.insert(n.clone()) {
-                pads.push((n, job.vdd));
+
+    let net_name = net.name.as_str();
+    let pin_shapes: Vec<&(String, i64, i64, i64, i64)> = def
+        .pins
+        .iter()
+        .filter(|p| p.use_power || p.use_ground)
+        .filter(|p| p.net == net_name || p.name == net_name)
+        .flat_map(|p| p.shapes.iter())
+        .collect();
+
+    if !pin_shapes.is_empty() {
+        for ((x, y), layers) in &at_point {
+            for layer in layers {
+                let covered = pin_shapes.iter().any(|(pl, x1, y1, x2, y2)| {
+                    pl == layer && *x >= *x1 && *x <= *x2 && *y >= *y1 && *y <= *y2
+                });
+                if covered {
+                    let n = node(layer, *x, *y);
+                    if seen_pad.insert(n.clone()) {
+                        pads.push((n, job.vdd));
+                    }
+                }
+            }
+        }
+    }
+
+    if pads.is_empty() {
+        for ((x, y), layers) in &at_point {
+            if layers.contains(&job.pad_layer) {
+                let n = node(&job.pad_layer, *x, *y);
+                if seen_pad.insert(n.clone()) {
+                    pads.push((n, job.vdd));
+                }
             }
         }
     }
     if pads.is_empty() {
         return Err(format!(
-            "pad_layer {:?} has no nodes in the DEF power grid",
+            "net {net_name:?} has no power pin shapes, and pad_layer {:?} has no nodes in the \
+             DEF power grid",
             job.pad_layer
         ));
     }

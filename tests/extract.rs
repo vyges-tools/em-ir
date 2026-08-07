@@ -284,3 +284,81 @@ fn a_via_with_no_definition_falls_back_rather_than_vanishing() {
         "with no definition to price it, the via falls back to via_res"
     );
 }
+
+// ── supply sources: the design's own power pin, not the whole top layer ──────────────
+
+/// Sources come from the power PIN's port shapes where the design declares one.
+///
+/// The grid is the same two met5 stripes as `DEF`, but only ONE of them carries the pin. The
+/// fallback model — every node on `pad_layer` is ideal — would hold all four met5 nodes at vdd
+/// and delete the resistance the supply crosses to reach the far stripe, which is why it
+/// under-reports IR drop. PDNSim uses the bterms first for exactly this reason.
+const PIN_DEF: &str = "\
+UNITS DISTANCE MICRONS 1000 ;
+PINS 1 ;
+    - VPWR + NET VPWR + SPECIAL + DIRECTION INOUT + USE POWER
+      + PORT
+        + LAYER met5 ( -100 -100 ) ( 100 10100 )
+      + FIXED ( 0 0 ) N ;
+END PINS
+SPECIALNETS 1 ;
+- VPWR
+  + USE POWER
+  + ROUTED met5 1000 ( 0 0 ) M54 ( 0 10000 ) M54
+    NEW met5 1000 ( 10000 0 ) M54 ( 10000 10000 ) M54
+    NEW met4 1000 ( 0 0 ) ( 10000 0 )
+    NEW met4 1000 ( 0 10000 ) ( 10000 10000 )
+ ;
+END SPECIALNETS
+";
+
+#[test]
+fn sources_are_the_power_pin_shapes_when_the_design_declares_them() {
+    let def = Def::parse(PIN_DEF).unwrap();
+    let lef = TechLef::parse(LEF).unwrap();
+    let spec = extract(&def, &lef, &job()).unwrap();
+
+    // The port covers x in [-100, 100], so only the x=0 stripe's two nodes are sources —
+    // not the x=10000 stripe, which the supply must now reach through met4.
+    assert_eq!(
+        spec.pads.len(),
+        2,
+        "only the met5 nodes inside the port rectangle are held at vdd, got {:?}",
+        spec.pads.iter().map(|(n, _)| n).collect::<Vec<_>>()
+    );
+    assert!(
+        spec.pads.iter().all(|(n, _)| n.starts_with("met5_0_")),
+        "the far stripe is NOT a source: {:?}",
+        spec.pads
+    );
+}
+
+#[test]
+fn sources_fall_back_to_the_pad_layer_when_no_power_pin_is_declared() {
+    // The same grid with no PINS section — PDNSim's own last resort, and ours.
+    let def = Def::parse(DEF).unwrap();
+    let lef = TechLef::parse(LEF).unwrap();
+    let spec = extract(&def, &lef, &job()).unwrap();
+    assert_eq!(
+        spec.pads.len(),
+        4,
+        "with nothing declared, every pad_layer node is a source"
+    );
+}
+
+#[test]
+fn a_restricted_source_set_reports_more_ir_drop_than_the_whole_layer() {
+    // The direction of the error, pinned. Holding a whole layer ideal removes resistance the
+    // real supply has to cross, so the fallback is OPTIMISTIC — and a checker that
+    // under-reports blesses designs it should fail.
+    let lef = TechLef::parse(LEF).unwrap();
+    let whole_layer = analyze(&extract(&Def::parse(DEF).unwrap(), &lef, &job()).unwrap()).unwrap();
+    let pin_only = analyze(&extract(&Def::parse(PIN_DEF).unwrap(), &lef, &job()).unwrap()).unwrap();
+
+    let a = whole_layer.worst_ir.unwrap().drop;
+    let b = pin_only.worst_ir.unwrap().drop;
+    assert!(
+        b > a,
+        "restricting sources to the declared pin must not reduce IR drop: pin {b} vs layer {a}"
+    );
+}

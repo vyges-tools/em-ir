@@ -169,23 +169,32 @@ against hand-checked synthetic grids and runs end to end on real sky130 routed D
 no measured agreement with PDNSim (or any commercial IR tool) exists. Treat it as an
 inner-loop estimate, not a sign-off gate, and run your sign-off tool for sign-off.
 
-Reading PDNSim's source (OpenROAD `b5624809`) identified three model differences that
-have **not** been measured yet, two of which make this engine **optimistic** — it will
-report less IR drop than it should:
+**The solver does not converge on a large PDN.** Measured on a routed sky130 block
+whose power grid extracts to 5 308 nodes, the Gauss-Seidel solve reaches a residual of
+1.1e-7 against its 1e-8 tolerance in 50 000 iterations and **returns an error rather
+than a result**. The largest grid this engine is recorded as having solved is 53 nodes.
+Erroring is the correct failure mode — it does not hand back an unconverged number —
+but treat real-block capability as unproven until this is fixed.
 
-- **Voltage sources.** Every node on `pad_layer` is held at the ideal supply. PDNSim
-  uses the design's power **bterm pin shapes** where they exist, falling back to all
-  top-layer nodes only when there are none. More ideal-source nodes means less
-  resistance between supply and load, so this **under-reports drop**.
-- **Via resistance.** One flat `via_res` (default 5.0 Ω) is used for every via.
-  PDNSim reads the per-cut `RESISTANCE` of each cut layer and divides by the number of
-  cuts. sky130 declares 9.30 / 4.50 / 3.41 / 3.41 / 0.38 Ω for mcon / via / via2 /
-  via3 / via4, so a single constant is wrong on every layer, in both directions.
-- **Instance current placement.** An instance's current lands wholly on the nearest
-  rail node; PDNSim splits it evenly across every node the instance touches.
+Comparing against PDNSim's source and its own network on the same design:
 
-Wire resistance (`ρ□ · L/W`) and the per-square resistance itself do agree with
-PDNSim's model under a default-RC flow.
+- **Wire resistance agrees.** `ρ□ · L/W` is the same formula, and the per-square value
+  is the same number. Measured per layer as total resistance: met1 1.003×, met4 1.005×,
+  met5 1.013× against PDNSim.
+- **Via resistance now agrees exactly.** Each via is priced as its cut layer's per-cut
+  LEF `RESISTANCE` divided by the cut count from the DEF `VIAS` definition: 1 635.725 Ω
+  over 1 895 vias against PDNSim's 1 635.7249999999501. (Before this, one flat 5.0 Ω was
+  5.6× to 13.2× high across the four via classes on that block.)
+- **Voltage sources now follow the design.** Sources are the power pin's port shapes
+  where the design declares them, falling back to all `pad_layer` nodes only when it
+  does not — PDNSim's own precedence. Whether the old all-top-layer model was optimistic
+  or pessimistic is **design-dependent and was not measured**; on that block it gave 28
+  source nodes where the declared pin gives 683.
+- **Instance current placement still differs.** An instance's current lands wholly on the
+  nearest rail node; PDNSim splits it evenly across every node the instance touches.
+
+Node counts are not comparable with PDNSim by construction: it resamples nodes on a
+minimum pitch, we place one per polyline point.
 
 **EM** has no counterpart to correlate against: PDNSim reports per-segment current but
 applies no current-density limit and issues no verdict. The limit check here is its own.
