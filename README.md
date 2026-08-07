@@ -190,14 +190,15 @@ Comparing against PDNSim's source and its own network on the same design:
   worst drop 0.27 % under the old model against 0.06 % under the declared pin. Which
   way that runs is **design-dependent** — it turns on how much of the grid a pin
   happens to cover — so it is measured per design rather than assumed.
-- **Voltages agree at the worst node.** Fed the same per-instance currents PDNSim
-  used, on the same block: worst IR drop 1.3271e-04 V against PDNSim's 1.3200e-04 V.
-  That is a ratio of 1.005 — but PDNSim's voltage file prints six decimals, so a
-  1 µV quantisation is ±0.76 % at that node. The supportable claim is **agreement to
-  the precision the oracle publishes**, not agreement to 0.5 %.
-- **Agreement decays away from the tail**, which is worth knowing before trusting a
-  margin: p99 0.957, p90 0.918, mean 0.901 — a one-sided 4–8 % low. Below that, the
-  oracle's own quantisation dominates and the comparison stops meaning anything.
+- **Voltages correlate across six routed sky130 blocks.** Worst IR drop against
+  PDNSim, fed the same per-instance currents and compared against a PDNSim run from
+  the same build: **1.005, 0.977, 1.004, 1.007, 1.018** — five of six within 2.3 %,
+  spanning 35 µA to 1.16 mA and 2 500 to 19 700 grid nodes. The sixth
+  (`temp_sensor_apb`) is 8.4 % low and is not yet explained.
+- **Precision bound worth knowing:** PDNSim's voltage file prints six decimals, so at
+  these magnitudes a 1 µV quantisation is a few tenths of a percent at the worst node.
+  Agreement is to the precision the oracle publishes, and comparison below roughly the
+  90th percentile of the drop distribution is dominated by that quantisation.
 - **Instance current enters at a tap on the rail.** Each instance's placement is
   projected onto its rail and the segment split there, so its current crosses the
   rail resistance it actually sits behind. Landing it on the nearest pre-existing
