@@ -25,9 +25,9 @@ which shortens the chip's life. Power sign-off proves both are within budget.
 
 In production, power sign-off is done with **the commercial IR/EM sign-off tools** —
 static and dynamic IR, EM rules, electrothermal — gated behind major licenses.
-The open baseline is **PDNSim** (in OpenROAD), which does static IR and basic EM.
-`vyges-em-ir` is an open engine in that space, behind a plain resistor-network
-file format, correlated against PDNSim as its baseline.
+The open baseline is **PDNSim** (in OpenROAD), which does static IR and reports
+per-segment current. `vyges-em-ir` is an open engine in that space, behind a plain
+resistor-network file format.
 
 **Describe the job, not the script.** The incumbent power-sign-off flows are driven
 by hand-written **Tcl** — a recurring source of silent typos, copy-paste drift, and
@@ -39,8 +39,8 @@ same way.
 **Validate fast, sign off with your tool.** `vyges-em-ir` works from a plain
 resistor-network / DEF + power description, so it complements rather than replaces the
 golden flow: run fast IR/EM checks during iteration, and keep the commercial IR/EM
-sign-off tools for final power sign-off. It sits *alongside* what you already run (correlated to PDNSim as
-its baseline) — the quick inner-loop check where you most need fast feedback.
+sign-off tools for final power sign-off. It sits *alongside* what you already run —
+the quick inner-loop check where you most need fast feedback.
 
 ## The problem it solves
 
@@ -161,6 +161,34 @@ never in this repository.
       ✓ runs out of the box                        • vyges-em-ir-sec28
                                                    EM density + electrothermal, under NDA
 ```
+
+## Maturity — what has and has not been measured
+
+**This engine has not yet been correlated against another IR solver.** It is validated
+against hand-checked synthetic grids and runs end to end on real sky130 routed DEFs, but
+no measured agreement with PDNSim (or any commercial IR tool) exists. Treat it as an
+inner-loop estimate, not a sign-off gate, and run your sign-off tool for sign-off.
+
+Reading PDNSim's source (OpenROAD `b5624809`) identified three model differences that
+have **not** been measured yet, two of which make this engine **optimistic** — it will
+report less IR drop than it should:
+
+- **Voltage sources.** Every node on `pad_layer` is held at the ideal supply. PDNSim
+  uses the design's power **bterm pin shapes** where they exist, falling back to all
+  top-layer nodes only when there are none. More ideal-source nodes means less
+  resistance between supply and load, so this **under-reports drop**.
+- **Via resistance.** One flat `via_res` (default 5.0 Ω) is used for every via.
+  PDNSim reads the per-cut `RESISTANCE` of each cut layer and divides by the number of
+  cuts. sky130 declares 9.30 / 4.50 / 3.41 / 3.41 / 0.38 Ω for mcon / via / via2 /
+  via3 / via4, so a single constant is wrong on every layer, in both directions.
+- **Instance current placement.** An instance's current lands wholly on the nearest
+  rail node; PDNSim splits it evenly across every node the instance touches.
+
+Wire resistance (`ρ□ · L/W`) and the per-square resistance itself do agree with
+PDNSim's model under a default-RC flow.
+
+**EM** has no counterpart to correlate against: PDNSim reports per-segment current but
+applies no current-density limit and issues no verdict. The limit check here is its own.
 
 ## Current state (2026-05-30)
 

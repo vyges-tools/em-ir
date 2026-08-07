@@ -298,7 +298,13 @@ fn main() {
   "summary": "EM / IR-drop power-integrity sign-off (PDN -> report)",
   "maturity": "workflow-validated",
   "provenance_limitations": [
-      "The job names the PDN or DEF/LEF and any power and decap maps; input_hash covers the job path and arguments, not their contents."
+      "The job names the PDN or DEF/LEF and any power and decap maps; input_hash covers the job path and arguments, not their contents.",
+      "NOT correlated against another IR solver. Validated on hand-checked synthetic grids and run end to end on real sky130 routed DEFs, but no measured agreement with PDNSim or any commercial IR tool exists. Use it as an inner-loop estimate, not a sign-off gate.",
+      "Voltage sources: every node on pad_layer is held at the ideal supply. PDNSim uses the design's power bterm pin shapes where they exist and falls back to all top-layer nodes only when there are none. More ideal-source nodes means less resistance between supply and load, so this engine UNDER-reports IR drop by an unmeasured amount.",
+      "Via resistance is one flat via_res (default 5.0 ohm) for every via, with no cut count. PDNSim reads the per-cut RESISTANCE of each cut layer and divides by the number of cuts; sky130 declares 9.30/4.50/3.41/3.41/0.38 ohm for mcon/via/via2/via3/via4, so a single constant is wrong on every layer in both directions.",
+      "An instance's current lands wholly on the nearest supply-rail node. PDNSim splits it evenly across every node the instance touches.",
+      "Wire resistance (rho_sq * L/W) and the per-square resistance itself DO agree with PDNSim's model under a default-RC flow; a flow that sets custom layer RC moves PDNSim's resistance and not ours, and neither tool reports the divergence.",
+      "EM has no counterpart to correlate against: PDNSim reports per-segment current but applies no current-density limit and issues no verdict. The DC/RMS/peak limit check here is its own."
   ],
   "invocation": {
     "args_template": ["run", "{job}"],
