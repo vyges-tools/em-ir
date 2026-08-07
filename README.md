@@ -195,10 +195,16 @@ Comparing against PDNSim's source and its own network on the same design:
   the same build: **1.005, 0.977, 1.004, 1.007, 1.018** — five of six within 2.3 %,
   spanning 35 µA to 1.16 mA and 2 500 to 19 700 grid nodes. The sixth
   (`temp_sensor_apb`) is 8.4 % low and is not yet explained.
-- **Precision bound worth knowing:** PDNSim's voltage file prints six decimals, so at
-  these magnitudes a 1 µV quantisation is a few tenths of a percent at the worst node.
-  Agreement is to the precision the oracle publishes, and comparison below roughly the
-  90th percentile of the drop distribution is dominated by that quantisation.
+- **Only the worst node is comparable, and that is a real limit.** PDNSim's voltage
+  file reports one row per *instance terminal*; this engine reports one row per *grid
+  node*. Those sample the same field in different proportions, so percentile-to-
+  percentile comparison is not like-for-like at any percentile — on one block PDNSim's
+  median drop is exactly 0.0, because most of its rows sit on filler and decap cells
+  packed against the supply straps. The maximum is comparable because both are the
+  extremum of one field; nothing below it is.
+- **Precision bound:** PDNSim's voltage file prints six decimals, so at these
+  magnitudes a 1 µV quantisation is a few tenths of a percent even at the worst node.
+  Agreement is to the precision the oracle publishes.
 - **Instance current enters at a tap on the rail.** Each instance's placement is
   projected onto its rail and the segment split there, so its current crosses the
   rail resistance it actually sits behind. Landing it on the nearest pre-existing
