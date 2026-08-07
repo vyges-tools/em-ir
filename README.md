@@ -207,8 +207,14 @@ Comparing against PDNSim's source and its own network on the same design:
 Node counts are not comparable with PDNSim by construction: it resamples nodes on a
 minimum pitch, we place one per polyline point.
 
-**EM** has no counterpart to correlate against: PDNSim reports per-segment current but
-applies no current-density limit and issues no verdict. The limit check here is its own.
+**EM**: PDNSim reports per-segment current but applies no current-density limit and
+issues no verdict, so only the *numerator* can be correlated — which is still the
+useful half, since it isolates the current computation from the LEF limit lookup.
+Maximum segment current per layer, the number a limit is compared against, across
+three blocks: met1 **1.022 / 1.026 / 1.035**, via **1.008 / 1.016 / 0.992**. On the
+~10 % of segments with an exact geometric counterpart, restricted to those carrying
+≥1 % of peak current, **92–99 % agree within 10 %** (median 0.997–1.003). The limit
+check itself has nothing to correlate against and remains this engine's own.
 
 ## Current state (2026-05-30)
 
