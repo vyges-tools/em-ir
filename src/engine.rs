@@ -40,6 +40,7 @@ pub fn demo() -> (EmIrJob, EmIrReport) {
         pdn: "(builtin)".into(),
         ir_limit_pct: 5.0,
         def: String::new(),
+        cell_lef: String::new(),
         lef: String::new(),
         vdd: 1.8,
         pad_layer: String::new(),

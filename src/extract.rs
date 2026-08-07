@@ -124,6 +124,38 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
         .min_by_key(|l| metal_index(l))
         .cloned();
 
+    // Cell footprints, when a cell LEF is supplied. DEF anchors an instance at its ORIGIN,
+    // but a cell draws supply through a pin that spans it, so current enters the rail around
+    // the cell's centre. Measured against PDNSim: the origin displaces every load by half a
+    // cell width -- 4.83 um on a `dfstp_2`, 2.07 um on a `mux2_1` -- which is invisible on a
+    // block of small cells and worth ~10% of the along-rail IR drop on a block of wide ones.
+    let cell_sizes: BTreeMap<String, (f64, f64)> = if job.cell_lef.is_empty() {
+        BTreeMap::new()
+    } else {
+        let text = std::fs::read_to_string(job.resolve(&job.cell_lef))
+            .map_err(|e| format!("cell_lef: {e}"))?;
+        let cl = crate::lef::TechLef::parse(&text).map_err(|e| format!("cell_lef: {e}"))?;
+        cl.macros
+            .iter()
+            .filter(|(_, m)| m.size_um.0 > 0.0)
+            .map(|(n, m)| (n.clone(), m.size_um))
+            .collect()
+    };
+
+    // The point a cell taps its rail: its centre where the footprint is known, else its
+    // origin. Orientation matters only in that a 90-degree rotation swaps width and height.
+    let cell_point = |c: &crate::def::Comp| -> (i64, i64) {
+        let Some(&(w, h)) = cell_sizes.get(&c.cell) else {
+            return (c.x, c.y);
+        };
+        let rotated = matches!(c.orient.as_str(), "E" | "W" | "FE" | "FW" | "R90" | "R270");
+        let (dx, dy) = if rotated { (h, w) } else { (w, h) };
+        (
+            c.x + (dx * dbu / 2.0) as i64,
+            c.y + (dy * dbu / 2.0) as i64,
+        )
+    };
+
     // instance name -> the point on the rail where its current enters
     let mut taps: BTreeMap<String, (i64, i64)> = BTreeMap::new();
     let mut tap_points: BTreeSet<(i64, i64)> = BTreeSet::new();
@@ -138,6 +170,7 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
             {
                 continue;
             }
+            let (cx, cy) = cell_point(c);
             let mut best: Option<(i64, (i64, i64))> = None;
             for s in &rails {
                 // Project onto the segment. Rails are axis-aligned, and only an
@@ -145,13 +178,13 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
                 // a rounded diagonal projection would name a node that does not exist and
                 // the current would vanish silently.
                 let p = if s.y1 == s.y2 {
-                    (c.x.clamp(s.x1.min(s.x2), s.x1.max(s.x2)), s.y1)
+                    (cx.clamp(s.x1.min(s.x2), s.x1.max(s.x2)), s.y1)
                 } else if s.x1 == s.x2 {
-                    (s.x1, c.y.clamp(s.y1.min(s.y2), s.y1.max(s.y2)))
+                    (s.x1, cy.clamp(s.y1.min(s.y2), s.y1.max(s.y2)))
                 } else {
                     continue;
                 };
-                let d = (p.0 - c.x) * (p.0 - c.x) + (p.1 - c.y) * (p.1 - c.y);
+                let d = (p.0 - cx) * (p.0 - cx) + (p.1 - cy) * (p.1 - cy);
                 if best.map(|(bd, _)| d < bd).unwrap_or(true) {
                     best = Some((d, p));
                 }

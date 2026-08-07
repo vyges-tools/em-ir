@@ -48,6 +48,7 @@ fn job(current_map: String, activity: f64, power_map: String) -> EmIrJob {
         pdn: String::new(),
         ir_limit_pct: 25.0,
         def: "(test)".into(),
+        cell_lef: String::new(),
         lef: "(test)".into(),
         vdd: 1.8,
         pad_layer: "met5".into(),

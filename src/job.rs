@@ -20,6 +20,11 @@ pub struct EmIrJob {
     // sheet resistance) build the resistor network instead of a hand-written `.pdn`.
     pub def: String,
     pub lef: String,
+    /// Optional **cell** LEF (the `MACRO` abstracts). Only `SIZE` is used, to place an
+    /// instance's supply tap at the centre of the cell rather than at the DEF origin.
+    /// Absent, taps fall back to the origin — which displaces every load by half a cell
+    /// width and under-reports along-rail IR drop on wide cells.
+    pub cell_lef: String,
     pub vdd: f64,           // supply voltage for the extracted grid
     pub pad_layer: String,  // metal layer whose nodes are tied to the pads (e.g. top metal)
     pub via_res: f64,       // per-via resistance (ohms) bridging layers at a via point
@@ -85,6 +90,7 @@ impl EmIrJob {
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(5.0),
             lef: kv.get("lef").cloned().unwrap_or_default(),
+            cell_lef: kv.get("cell_lef").cloned().unwrap_or_default(),
             vdd: kv.get("vdd").and_then(|s| s.parse().ok()).unwrap_or(1.8),
             pad_layer: kv.get("pad_layer").cloned().unwrap_or_default(),
             via_res: kv

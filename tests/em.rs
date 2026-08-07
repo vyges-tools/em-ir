@@ -37,6 +37,7 @@ fn job() -> EmIrJob {
         pdn: String::new(),
         ir_limit_pct: 25.0,
         def: "(t)".into(),
+        cell_lef: String::new(),
         lef: "(t)".into(),
         vdd: 1.8,
         pad_layer: "met5".into(),

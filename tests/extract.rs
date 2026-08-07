@@ -43,6 +43,7 @@ fn job() -> EmIrJob {
         pdn: String::new(),
         ir_limit_pct: 5.0,
         def: "(test)".into(),
+        cell_lef: String::new(),
         lef: "(test)".into(),
         vdd: 1.8,
         pad_layer: "met5".into(),
@@ -360,5 +361,90 @@ fn a_restricted_source_set_reports_more_ir_drop_than_the_whole_layer() {
     assert!(
         b > a,
         "restricting sources to the declared pin must not reduce IR drop: pin {b} vs layer {a}"
+    );
+}
+
+// ── a cell taps its rail where the cell sits, not where DEF anchors it ───────────────
+
+/// DEF places an instance by its ORIGIN — the lower-left corner. The cell draws supply
+/// through a rail-spanning pin, so current enters around the cell's middle. Using the
+/// origin displaces every load by half a cell width.
+///
+/// Measured against PDNSim on a block of wide cells: `dfstp_2` is 9.66 um, so its supply
+/// was entering the rail 4.83 um upstream of where PDNSim injects it, and the along-rail
+/// IR drop came out ~10% low as a result.
+const CELL_LEF: &str = "\
+MACRO wide_cell
+  CLASS CORE ;
+  SIZE 10.000000 BY 2.720000 ;
+  PIN VPWR
+    DIRECTION INOUT ;
+  END VPWR
+END wide_cell
+";
+
+const WIDE_DEF: &str = "\
+UNITS DISTANCE MICRONS 1000 ;
+COMPONENTS 1 ;
+- g1 wide_cell + PLACED ( 20000 100 ) N ;
+END COMPONENTS
+SPECIALNETS 1 ;
+- VPWR
+  + USE POWER
+  + ROUTED met5 1000 ( 0 0 ) M54 ( 0 10000 ) M54
+    NEW met4 1000 ( 0 0 ) ( 60000 0 )
+ ;
+END SPECIALNETS
+";
+
+fn wide_job(cell_lef: String) -> EmIrJob {
+    let mut j = job();
+    j.total_current = 0.0;
+    j.cell_lef = cell_lef;
+    j.current_map = {
+        let p = std::env::temp_dir().join("emir_wide_cur.map");
+        std::fs::write(&p, "g1 1.0e-3\n").unwrap();
+        p.to_string_lossy().into_owned()
+    };
+    j
+}
+
+#[test]
+fn a_cell_taps_its_rail_at_its_centre_when_the_footprint_is_known() {
+    let p = std::env::temp_dir().join("emir_cells.lef");
+    std::fs::write(&p, CELL_LEF).unwrap();
+    let spec = extract(
+        &Def::parse(WIDE_DEF).unwrap(),
+        &TechLef::parse(LEF).unwrap(),
+        &wide_job(p.to_string_lossy().into_owned()),
+    )
+    .unwrap();
+
+    // origin x = 20000, cell is 10 um wide -> the tap belongs at 25000, not 20000.
+    assert!(
+        spec.loads.iter().any(|(n, _)| n == "met4_25000_0"),
+        "current must enter at the cell's centre; loads were {:?}",
+        spec.loads.iter().map(|(n, _)| n).collect::<Vec<_>>()
+    );
+    assert!(
+        !spec.loads.iter().any(|(n, _)| n == "met4_20000_0"),
+        "and NOT at the DEF origin, which is half a cell width upstream"
+    );
+}
+
+#[test]
+fn without_a_cell_lef_the_tap_falls_back_to_the_origin() {
+    // No footprint stated, so there is nothing to centre on. Falling back is right; silently
+    // pretending to know the geometry would not be.
+    let spec = extract(
+        &Def::parse(WIDE_DEF).unwrap(),
+        &TechLef::parse(LEF).unwrap(),
+        &wide_job(String::new()),
+    )
+    .unwrap();
+    assert!(
+        spec.loads.iter().any(|(n, _)| n == "met4_20000_0"),
+        "falls back to the DEF origin, got {:?}",
+        spec.loads.iter().map(|(n, _)| n).collect::<Vec<_>>()
     );
 }
