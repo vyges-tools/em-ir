@@ -192,9 +192,10 @@ Comparing against PDNSim's source and its own network on the same design:
   happens to cover — so it is measured per design rather than assumed.
 - **Voltages correlate across six routed sky130 blocks.** Worst IR drop against
   PDNSim, fed the same per-instance currents and compared against a PDNSim run from
-  the same build: **1.005, 0.977, 1.004, 1.007, 1.018** — five of six within 2.3 %,
-  spanning 35 µA to 1.16 mA and 2 500 to 19 700 grid nodes. The sixth
-  (`temp_sensor_apb`) is 8.4 % low and is not yet explained.
+  the same build: **1.019, 1.001, 0.994, 0.997, 1.018, 1.015** — all six within
+  1.9 %, spanning 35 µA to 1.16 mA and 2 500 to 19 700 grid nodes. PDNSim's own
+  values carry only two or three significant figures at these magnitudes, so this
+  is close to the floor the comparison can resolve.
 - **Only the worst node is comparable, and that is a real limit.** PDNSim's voltage
   file reports one row per *instance terminal*; this engine reports one row per *grid
   node*. Those sample the same field in different proportions, so percentile-to-
@@ -205,10 +206,12 @@ Comparing against PDNSim's source and its own network on the same design:
 - **Precision bound:** PDNSim's voltage file prints six decimals, so at these
   magnitudes a 1 µV quantisation is a few tenths of a percent even at the worst node.
   Agreement is to the precision the oracle publishes.
-- **Instance current enters at a tap on the rail.** Each instance's placement is
-  projected onto its rail and the segment split there, so its current crosses the
-  rail resistance it actually sits behind. Landing it on the nearest pre-existing
-  node instead under-reported worst IR drop by 3.2× against PDNSim.
+- **Instance current enters at a tap on the rail**, at the **cell's centre** when a
+  `cell_lef` supplies the footprint, else at the DEF origin. Both matter and were
+  measured: landing current on the nearest pre-existing node under-reported worst IR
+  drop by 3.2×, and taking the DEF origin rather than the cell centre displaced every
+  load by half a cell width — worth 8.4 % on a block of wide cells and invisible on a
+  block of small ones.
 
 Node counts are not comparable with PDNSim by construction: it resamples nodes on a
 minimum pitch, we place one per polyline point.
