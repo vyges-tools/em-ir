@@ -93,8 +93,79 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
         m.entry((x, y)).or_default().insert(layer.to_string());
     };
 
+    // ── where each instance's current enters the grid ────────────────────────────────
+    //
+    // A cell taps the supply from the rail it sits on, at its own position along that
+    // rail. Landing its current on the nearest EXISTING node instead means the current
+    // never crosses the rail resistance between the cell and that node — and since a
+    // rail is one long segment until something splits it, "the nearest node" is usually
+    // an endpoint far away.
+    //
+    // Measured against PDNSim on a routed sky130 block, that was worth 3.2x: 15 704
+    // current-carrying instances collapsed onto 834 injection nodes, our met1 rails were
+    // 750 resistors averaging 29.9 ohm where PDNSim had 32 603 averaging 0.685 ohm for
+    // the SAME total resistance, and we under-reported worst IR drop by that factor. The
+    // resistance was all present; the current was entering in the wrong places.
+    //
+    // So each instance gets a tap point on its rail, and the segment is split there — the
+    // same mechanism vias already use. PDNSim reaches the same end differently, hanging an
+    // ITermNode off the rail per terminal through a 1 mohm stub.
+    let pmap = read_map(job, &job.power_map)?;
+    let dmap = read_map(job, &job.decap_map)?;
+    let imap = read_map(job, &job.current_map)?;
+
+    // The rail layer: the lowest metal the power net is drawn on that is not the supply
+    // plane. This is where standard cells connect.
+    let rail_layer: Option<String> = net
+        .segs
+        .iter()
+        .map(|s| &s.layer)
+        .filter(|l| **l != job.pad_layer)
+        .min_by_key(|l| metal_index(l))
+        .cloned();
+
+    // instance name -> the point on the rail where its current enters
+    let mut taps: BTreeMap<String, (i64, i64)> = BTreeMap::new();
+    let mut tap_points: BTreeSet<(i64, i64)> = BTreeSet::new();
+    if let Some(rl) = &rail_layer {
+        let rails: Vec<&crate::def::Seg> =
+            net.segs.iter().filter(|s| s.layer == *rl).collect();
+        for c in &def.comps {
+            // only instances that will actually carry current or capacitance
+            if !imap.contains_key(&c.name)
+                && !pmap.contains_key(&c.cell)
+                && !dmap.contains_key(&c.cell)
+            {
+                continue;
+            }
+            let mut best: Option<(i64, (i64, i64))> = None;
+            for s in &rails {
+                // Project onto the segment. Rails are axis-aligned, and only an
+                // axis-aligned projection is guaranteed to land EXACTLY on the segment —
+                // a rounded diagonal projection would name a node that does not exist and
+                // the current would vanish silently.
+                let p = if s.y1 == s.y2 {
+                    (c.x.clamp(s.x1.min(s.x2), s.x1.max(s.x2)), s.y1)
+                } else if s.x1 == s.x2 {
+                    (s.x1, c.y.clamp(s.y1.min(s.y2), s.y1.max(s.y2)))
+                } else {
+                    continue;
+                };
+                let d = (p.0 - c.x) * (p.0 - c.x) + (p.1 - c.y) * (p.1 - c.y);
+                if best.map(|(bd, _)| d < bd).unwrap_or(true) {
+                    best = Some((d, p));
+                }
+            }
+            if let Some((_, p)) = best {
+                taps.insert(c.name.clone(), p);
+                tap_points.insert(p);
+            }
+        }
+    }
+
     // wire resistors: split each segment at the via points lying on it, so a via that
-    // lands mid-stripe gets a node it can bridge through.
+    // lands mid-stripe gets a node it can bridge through, and at the tap points where
+    // instance current enters.
     let mut resistors: Vec<Resistor> = Vec::new();
     for s in &net.segs {
         let lr = lef.layers.get(&s.layer);
@@ -121,12 +192,21 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
         let em_limit = lim(lr.map(|l| l.dc_jmax).unwrap_or(0.0));
         let em_rms_limit = lim(lr.map(|l| l.ac_rms).unwrap_or(0.0));
         let em_peak_limit = lim(lr.map(|l| l.ac_peak).unwrap_or(0.0));
-        // collect split points (via locations on this segment), ordered along it.
-        let mut cuts: Vec<(i64, i64)> = via_locs
+        // collect split points (via locations and instance taps on this segment), ordered
+        // along it. Deduplicated: many cells on one rail can project to the same point, and
+        // a tap can coincide with a via.
+        let mut cutset: BTreeSet<(i64, i64)> = via_locs
             .iter()
             .copied()
             .filter(|&(px, py)| on_segment(s.x1, s.y1, s.x2, s.y2, px, py))
             .collect();
+        cutset.extend(
+            tap_points
+                .iter()
+                .copied()
+                .filter(|&(px, py)| on_segment(s.x1, s.y1, s.x2, s.y2, px, py)),
+        );
+        let mut cuts: Vec<(i64, i64)> = cutset.into_iter().collect();
         let (dx, dy) = (s.x2 - s.x1, s.y2 - s.y1);
         cuts.sort_by_key(|&(px, py)| (px - s.x1) * dx + (py - s.y1) * dy);
         // emit the chain p1 -> cut1 -> ... -> p2
@@ -302,11 +382,26 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
     let mut switches: Vec<Switch> = Vec::new();
     let mut caps: Vec<(String, f64)> = Vec::new();
 
-    let nearest = |cx: i64, cy: i64| -> Option<&String> {
+    // Where an instance's current enters: the tap node split into its own rail above.
+    // Falls back to the nearest existing rail node only when no rail segment could be
+    // projected onto — which under-reports drop (see the tap comment), so it is counted
+    // rather than left to be inferred from a quietly smaller answer.
+    let mut untapped = 0usize;
+    let rail = rail_layer.clone().unwrap_or_default();
+    let nearest = |cx: i64, cy: i64| -> Option<String> {
         lnodes
             .iter()
             .min_by_key(|(_, x, y)| (x - cx) * (x - cx) + (y - cy) * (y - cy))
-            .map(|(n, _, _)| n)
+            .map(|(n, _, _)| n.clone())
+    };
+    let mut tap_node = |c: &crate::def::Comp, untapped: &mut usize| -> Option<String> {
+        match taps.get(&c.name) {
+            Some(&(tx, ty)) => Some(node(&rail, tx, ty)),
+            None => {
+                *untapped += 1;
+                nearest(c.x, c.y)
+            }
+        }
     };
 
     if (!job.power_map.is_empty() || !job.decap_map.is_empty() || !job.current_map.is_empty())
@@ -322,9 +417,6 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
         // current is the measured/estimated value, so the droop reflects real activity
         // instead of worst-case-simultaneous switching. The char energy still drives
         // the per-instance switch event for the dynamic solve.
-        let pmap = read_map(job, &job.power_map)?;
-        let dmap = read_map(job, &job.decap_map)?;
-        let imap = read_map(job, &job.current_map)?; // instance -> current (A)
         let f = job.clock_ghz * 1e9;
         let mut sload: BTreeMap<String, f64> = BTreeMap::new();
         let mut senergy: BTreeMap<String, f64> = BTreeMap::new();
@@ -332,7 +424,7 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
         for c in &def.comps {
             // static current: per-instance from vyges-power if present, else q·f·activity
             if let Some(&cur) = imap.get(&c.name) {
-                if let Some(name) = nearest(c.x, c.y) {
+                if let Some(name) = tap_node(c, &mut untapped) {
                     *sload.entry(name.clone()).or_default() += cur;
                     if let Some(&e) = pmap.get(&c.cell) {
                         if e > 0.0 {
@@ -342,7 +434,7 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
                 }
             } else if let Some(&e) = pmap.get(&c.cell) {
                 if e > 0.0 {
-                    if let Some(name) = nearest(c.x, c.y) {
+                    if let Some(name) = tap_node(c, &mut untapped) {
                         let q = e * 1e-12 / job.vdd; // Coulombs per switch
                         *sload.entry(name.clone()).or_default() += q * f * job.activity;
                         *senergy.entry(name.clone()).or_default() += e;
@@ -352,7 +444,7 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
             // placed decoupling capacitance from decap cells
             if let Some(&cf) = dmap.get(&c.cell) {
                 if cf > 0.0 {
-                    if let Some(name) = nearest(c.x, c.y) {
+                    if let Some(name) = tap_node(c, &mut untapped) {
                         *dcap.entry(name.clone()).or_default() += cf;
                     }
                 }

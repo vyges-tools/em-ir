@@ -190,17 +190,18 @@ Comparing against PDNSim's source and its own network on the same design:
   worst drop 0.27 % under the old model against 0.06 % under the declared pin. Which
   way that runs is **design-dependent** — it turns on how much of the grid a pin
   happens to cover — so it is measured per design rather than assumed.
-- **Voltages do not yet agree: this engine under-reports IR drop by ~3.2×.** Fed the
-  same per-instance currents PDNSim used, on the same block, worst drop came out
-  4.13e-05 V against PDNSim's 1.32e-04 V. Under-reporting is the dangerous
-  direction for a checker, so treat a clean IR verdict here as unproven.
-- **The cause is where current enters the grid, not the resistance.** Instance
-  current lands wholly on the nearest rail node, and this engine places nodes only
-  at polyline points — so 15 704 current-carrying instances collapse onto 834
-  injection nodes, and a standard-cell rail is one long resistor (750 met1
-  resistors averaging 29.9 Ω) where PDNSim has 32 603 averaging 0.685 Ω for the
-  same total. Current injected at a rail's end never crosses the rail resistance
-  the cell actually sits behind.
+- **Voltages agree at the worst node.** Fed the same per-instance currents PDNSim
+  used, on the same block: worst IR drop 1.3271e-04 V against PDNSim's 1.3200e-04 V.
+  That is a ratio of 1.005 — but PDNSim's voltage file prints six decimals, so a
+  1 µV quantisation is ±0.76 % at that node. The supportable claim is **agreement to
+  the precision the oracle publishes**, not agreement to 0.5 %.
+- **Agreement decays away from the tail**, which is worth knowing before trusting a
+  margin: p99 0.957, p90 0.918, mean 0.901 — a one-sided 4–8 % low. Below that, the
+  oracle's own quantisation dominates and the comparison stops meaning anything.
+- **Instance current enters at a tap on the rail.** Each instance's placement is
+  projected onto its rail and the segment split there, so its current crosses the
+  rail resistance it actually sits behind. Landing it on the nearest pre-existing
+  node instead under-reported worst IR drop by 3.2× against PDNSim.
 
 Node counts are not comparable with PDNSim by construction: it resamples nodes on a
 minimum pitch, we place one per polyline point.

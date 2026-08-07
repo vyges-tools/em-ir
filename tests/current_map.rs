@@ -1,6 +1,6 @@
 // current_map: a per-instance current (from vyges-power's activity map) overrides
 // the global `q · f · activity` worst-case assumption — each instance's static
-// current is the measured/estimated value, landed on its nearest rail node.
+// current is the measured/estimated value, landed on its own tap point on the rail.
 use std::fs;
 use vyges_em_ir::def::Def;
 use vyges_em_ir::extract::extract;
@@ -18,8 +18,9 @@ LAYER met4
 END met4
 ";
 
-// met5 pad stripe + met4 rail (nodes at x=0 and x=10um). Two instances, one near
-// each rail node.
+// met5 pad stripe + one met4 rail spanning x=0..10um, whose only nodes as written are
+// its two endpoints. Two instances sit ON that rail, away from both ends — so the rail
+// has to be split at each of them for their current to enter where the cell actually is.
 const DEF: &str = "\
 UNITS DISTANCE MICRONS 1000 ;
 COMPONENTS 2 ;
@@ -83,7 +84,6 @@ fn current_map_lands_per_instance_current_verbatim() {
         &job(cmap, 0.5, String::new()),
     )
     .unwrap();
-    // 1 mA at g1's node (met4_0_0), 0.2 mA at g2's (met4_10000_0)
     let at = |n: &str| {
         spec.loads
             .iter()
@@ -91,8 +91,17 @@ fn current_map_lands_per_instance_current_verbatim() {
             .map(|(_, c)| *c)
             .unwrap_or(0.0)
     };
-    assert!((at("met4_0_0") - 1.0e-3).abs() < 1e-9, "g1 -> 1 mA");
-    assert!((at("met4_10000_0") - 2.0e-4).abs() < 1e-9, "g2 -> 0.2 mA");
+
+    // Each instance taps the rail directly beneath itself: g1 at x=1000, g2 at x=9000.
+    assert!((at("met4_1000_0") - 1.0e-3).abs() < 1e-9, "g1 -> 1 mA at its own tap");
+    assert!((at("met4_9000_0") - 2.0e-4).abs() < 1e-9, "g2 -> 0.2 mA at its own tap");
+
+    // And NOT at the rail's endpoints, which is where the nearest-existing-node rule used
+    // to put them. That rule let the current skip the rail resistance between the cell and
+    // the end of the rail, and under-reported IR drop by 3.2x against PDNSim on a real
+    // block. Asserting the endpoints are empty is what makes this test fail if it returns.
+    assert_eq!(at("met4_0_0"), 0.0, "no current at the rail's start");
+    assert_eq!(at("met4_10000_0"), 0.0, "no current at the rail's end");
 }
 
 #[test]

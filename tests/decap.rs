@@ -65,7 +65,7 @@ fn job(power_map: String, decap_map: String) -> EmIrJob {
 }
 
 #[test]
-fn decap_cell_lands_capacitance_at_nearest_rail_node() {
+fn decap_cell_lands_capacitance_at_its_own_tap_on_the_rail() {
     let pmap = tmp("emir_pwr.map", "INVX 0.02\n");
     let dmap = tmp("emir_decap.map", "DECAP 0.5\n");
     let spec = extract(
@@ -74,14 +74,19 @@ fn decap_cell_lands_capacitance_at_nearest_rail_node() {
         &job(pmap, dmap),
     )
     .unwrap();
-    // the decap (at x=9um) lands on the nearest rail node, met4_10000_0
+    // The decap sits at x=9um, so its capacitance belongs on the rail beneath it — not at
+    // the rail's far end. Where decoupling capacitance sits is the whole point of placing
+    // it: moved to an endpoint it decouples somewhere the current never flows.
     assert_eq!(spec.caps.len(), 1, "one placed decap");
-    assert_eq!(spec.caps[0].0, "met4_10000_0");
+    assert_eq!(spec.caps[0].0, "met4_9000_0");
     assert!((spec.caps[0].1 - 0.5).abs() < 1e-12, "0.5 pF placed");
-    // the inverter (at x=1um) drives current + a switch event at met4_0_0
-    assert!(spec.loads.iter().any(|(n, _)| n == "met4_0_0"));
+    // likewise the inverter at x=1um draws current and switches at its own tap
+    assert!(spec.loads.iter().any(|(n, _)| n == "met4_1000_0"));
     assert_eq!(spec.switches.len(), 1);
-    assert_eq!(spec.switches[0].node, "met4_0_0");
+    assert_eq!(spec.switches[0].node, "met4_1000_0");
+    // and nothing is left at the endpoints the old nearest-node rule used
+    assert!(!spec.loads.iter().any(|(n, _)| n == "met4_0_0"));
+    assert!(!spec.caps.iter().any(|(n, _)| n == "met4_10000_0"));
 }
 
 #[test]
