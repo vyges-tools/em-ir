@@ -216,6 +216,21 @@ Comparing against PDNSim's source and its own network on the same design:
 Node counts are not comparable with PDNSim by construction: it resamples nodes on a
 minimum pitch, we place one per polyline point.
 
+**Dynamic (transient) IR has no oracle at all** — PDNSim is static-only, so there is
+nothing to correlate it against. It is instead checked against exact analytic cases
+(with no decap the solve is exactly quasi-static, so the peak is `ipk·R` to 1e-9) and
+invariants that hold by construction (droop scales linearly with switch energy;
+coincident switches superpose; decap monotonically removes droop). Those tests are
+mutation-checked. Three limits matter more than the accuracy:
+
+- **Every instance switches at one global `switch_t_ns`**, so the result is
+  worst-case-simultaneous switching — a strict upper bound, not a waveform.
+- **The timestep is implicit** (`min(switch duration)/10`) and cannot be set, so
+  accuracy cannot be traded for runtime and convergence cannot be demonstrated.
+- **Only the worst droop is reported**; no waveform is exposed.
+
+It does run at scale: 13 292 nodes in 22 s and 248 MB.
+
 **EM**: PDNSim reports per-segment current but applies no current-density limit and
 issues no verdict, so only the *numerator* can be correlated — which is still the
 useful half, since it isolates the current computation from the LEF limit lookup.
