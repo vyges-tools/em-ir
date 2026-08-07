@@ -191,3 +191,96 @@ fn solves_ir_on_extracted_grid() {
         w.drop
     );
 }
+
+// ── per-via resistance, from the via definition rather than one flat number ──────────
+
+/// A via is priced by its own cut layer and cut count, not by a single constant.
+///
+/// Both facts live in the DEF `VIAS` entry and nowhere else: `LAYERS <below> <cut> <above>`
+/// names the cut layer whose LEF `RESISTANCE` is stated **per cut**, and `ROWCOL` gives how
+/// many cuts are in the array. The via's own name is deliberately misleading here — exactly as
+/// sky130 writes it — so a reader that parses the name instead of the definition fails.
+const VIA_LEF: &str = "\
+LAYER met5
+  TYPE ROUTING ;
+  RESISTANCE RPERSQ 0.1 ;
+  WIDTH 1.0 ;
+END met5
+LAYER met4
+  TYPE ROUTING ;
+  RESISTANCE RPERSQ 0.1 ;
+  WIDTH 1.0 ;
+END met4
+LAYER via4
+  TYPE CUT ;
+  RESISTANCE 0.38 ;
+END via4
+";
+
+const VIA_DEF: &str = "\
+UNITS DISTANCE MICRONS 1000 ;
+VIAS 1 ;
+    - via5_6_named_to_mislead + VIARULE M4M5_PR + LAYERS met4 via4 met5  + ROWCOL 1 4  ;
+END VIAS
+SPECIALNETS 1 ;
+- VPWR
+  + USE POWER
+  + ROUTED met5 1000 ( 0 0 ) ( 0 10000 )
+    NEW met4 1000 ( 0 0 ) ( 10000 0 )
+    NEW met4 1000 ( 0 0 ) 0 via5_6_named_to_mislead
+ ;
+END SPECIALNETS
+";
+
+#[test]
+fn a_via_is_priced_by_its_cut_layer_and_cut_count() {
+    let def = Def::parse(VIA_DEF).unwrap();
+    let lef = TechLef::parse(VIA_LEF).unwrap();
+    let mut j = job();
+    j.via_res = 5.0; // the old flat value — must NOT be what the via ends up costing
+    let spec = extract(&def, &lef, &j).unwrap();
+
+    let vias: Vec<_> = spec
+        .resistors
+        .iter()
+        .filter(|r| r.layer.as_deref() == Some("via"))
+        .collect();
+    assert_eq!(vias.len(), 1, "one via bridging met4 and met5");
+
+    // 0.38 ohm per cut over a 1x4 array = 0.095 ohm, not the 5.0 ohm fallback and not 0.38.
+    let expected = 0.38 / 4.0;
+    assert!(
+        (vias[0].r - expected).abs() < 1e-12,
+        "via priced at {} ohm; expected {} = per-cut 0.38 / 4 cuts (flat fallback would give {})",
+        vias[0].r,
+        expected,
+        j.via_res
+    );
+}
+
+#[test]
+fn a_via_with_no_definition_falls_back_rather_than_vanishing() {
+    // The same grid with the VIAS section removed: nothing states a cut layer or a cut count,
+    // so the job's via_res stands in. A via that silently disappeared would break the stack
+    // and leave the lower layers unreachable — a much worse failure than an approximate value.
+    let no_defs = VIA_DEF.replace(
+        "VIAS 1 ;\n    - via5_6_named_to_mislead + VIARULE M4M5_PR + LAYERS met4 via4 met5  + ROWCOL 1 4  ;\nEND VIAS\n",
+        "",
+    );
+    let def = Def::parse(&no_defs).unwrap();
+    let lef = TechLef::parse(VIA_LEF).unwrap();
+    let mut j = job();
+    j.via_res = 5.0;
+    let spec = extract(&def, &lef, &j).unwrap();
+
+    let vias: Vec<_> = spec
+        .resistors
+        .iter()
+        .filter(|r| r.layer.as_deref() == Some("via"))
+        .collect();
+    assert_eq!(vias.len(), 1, "the via is still built");
+    assert!(
+        (vias[0].r - 5.0).abs() < 1e-12,
+        "with no definition to price it, the via falls back to via_res"
+    );
+}

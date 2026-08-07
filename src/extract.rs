@@ -158,6 +158,47 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
         note(*x, *y, layer, &mut at_point);
     }
 
+    // Per-location via resistance, from the via definition the DEF names there.
+    //
+    // A via's resistance is its cut layer's LEF `RESISTANCE` (stated **per cut**) divided by
+    // the number of cuts in the array. Both come from the DEF `VIAS` entry: `LAYERS <below>
+    // <cut> <above>` names the cut layer, `ROWCOL` gives the count. Neither is recoverable
+    // from the via's coordinate, and the via's *name* is not usable either — sky130 PDN vias
+    // are called `via2_3_…` while bridging met1->met2.
+    //
+    // Measured against PDNSim on a routed sky130 block: a single flat resistance was 5.6x to
+    // 13.2x too high across the four via classes present, because those arrays carry 5, 4, 4
+    // and 1 cuts against per-cut values spanning 0.38 to 4.50 ohm. `via_res` remains the
+    // fallback for a via whose definition or cut-layer resistance the files do not state.
+    //
+    // Keyed on the LAYER PAIR as well as the point, because a PDN via stack puts several via
+    // definitions at the SAME (x,y) — met1->met2, met2->met3, met3->met4 all land on one
+    // coordinate. Keyed on the point alone one definition wins and prices the whole stack:
+    // that cost 3.6 % on the first measurement here, and it is small only because those three
+    // cut layers happen to be similar. A stack spanning mcon (9.30 ohm) to via4 (0.38) would
+    // be wrong by an order of magnitude.
+    let mut via_r_at: BTreeMap<(i64, i64, String, String), f64> = BTreeMap::new();
+    if let Some(n) = def.power_net() {
+        for (name, x, y) in &n.via_names {
+            let Some(vd) = def.via_defs.get(name) else {
+                continue;
+            };
+            let Some(cut_res) = lef.layers.get(&vd.cut_layer).map(|l| l.cut_res) else {
+                continue;
+            };
+            if cut_res <= 0.0 || vd.cuts == 0 {
+                continue;
+            }
+            // order the pair the way the stack walk below sees it (low metal first)
+            let (lo, hi) = if metal_index(&vd.below) <= metal_index(&vd.above) {
+                (vd.below.clone(), vd.above.clone())
+            } else {
+                (vd.above.clone(), vd.below.clone())
+            };
+            via_r_at.insert((*x, *y, lo, hi), cut_res / vd.cuts as f64);
+        }
+    }
+
     // via resistors: at each via location connect the adjacent metal layers present.
     for &(x, y) in &via_locs {
         let Some(layers) = at_point.get(&(x, y)) else {
@@ -166,10 +207,14 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
         let mut ls: Vec<&String> = layers.iter().collect();
         ls.sort_by_key(|l| metal_index(l));
         for w in ls.windows(2) {
+            let r = via_r_at
+                .get(&(x, y, w[0].clone(), w[1].clone()))
+                .copied()
+                .unwrap_or(job.via_res);
             resistors.push(Resistor {
                 a: node(w[0], x, y),
                 b: node(w[1], x, y),
-                r: job.via_res,
+                r,
                 layer: Some("via".to_string()),
                 em_limit: None, // via EM (per-cut) is a follow-up
                 em_rms_limit: None,
