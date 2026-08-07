@@ -51,8 +51,8 @@ system for **every node voltage**, then reports:
 - the **worst IR drop** (supply sag vs nominal, in volts and % of vdd), and
 - every **EM** segment whose current `|Δv|/R` exceeds its per-layer limit.
 
-The solve is Gauss-Seidel over the reduced free-node system (the PDN is
-diagonally dominant, so it converges).
+The solve is conjugate gradient with a Jacobi preconditioner over the reduced
+free-node system, which is symmetric positive-definite.
 
 ## When & how to use it in your flow
 
@@ -169,12 +169,10 @@ against hand-checked synthetic grids and runs end to end on real sky130 routed D
 no measured agreement with PDNSim (or any commercial IR tool) exists. Treat it as an
 inner-loop estimate, not a sign-off gate, and run your sign-off tool for sign-off.
 
-**The solver does not converge on a large PDN.** Measured on a routed sky130 block
-whose power grid extracts to 5 308 nodes, the Gauss-Seidel solve reaches a residual of
-1.1e-7 against its 1e-8 tolerance in 50 000 iterations and **returns an error rather
-than a result**. The largest grid this engine is recorded as having solved is 53 nodes.
-Erroring is the correct failure mode — it does not hand back an unconverged number —
-but treat real-block capability as unproven until this is fixed.
+**Solved on a real block.** A routed sky130 PDN extracting to 5 308 nodes solves in
+0.46 s. The solver is conjugate gradient with a Jacobi preconditioner; it was
+Gauss-Seidel, which on that same block stopped short of tolerance after 50 000 sweeps
+and returned an error rather than a result.
 
 Comparing against PDNSim's source and its own network on the same design:
 
@@ -187,9 +185,11 @@ Comparing against PDNSim's source and its own network on the same design:
   5.6× to 13.2× high across the four via classes on that block.)
 - **Voltage sources now follow the design.** Sources are the power pin's port shapes
   where the design declares them, falling back to all `pad_layer` nodes only when it
-  does not — PDNSim's own precedence. Whether the old all-top-layer model was optimistic
-  or pessimistic is **design-dependent and was not measured**; on that block it gave 28
-  source nodes where the declared pin gives 683.
+  does not — PDNSim's own precedence. On that block the declared pin covers 683 grid
+  nodes where the old all-top-layer model held 28, and it changes the answer by 4.1×:
+  worst drop 0.27 % under the old model against 0.06 % under the declared pin. Which
+  way that runs is **design-dependent** — it turns on how much of the grid a pin
+  happens to cover — so it is measured per design rather than assumed.
 - **Instance current placement still differs.** An instance's current lands wholly on the
   nearest rail node; PDNSim splits it evenly across every node the instance touches.
 
