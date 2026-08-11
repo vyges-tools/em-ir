@@ -15,14 +15,14 @@ use vyges_em_ir::engine;
 use vyges_em_ir::job::EmIrJob;
 
 const USAGE: &str = "\
-vyges-em-ir — EM / IR-drop power-integrity sign-off (PDN -> report)
+vyges loom em-ir — EM / IR-drop power-integrity sign-off (PDN -> report)
 
 usage:
-  vyges-em-ir run   JOB [-o OUT] [--json] [--fail-on-violation]
-  vyges-em-ir check JOB
-  vyges-em-ir demo  [-o OUT] [--json]
-  vyges-em-ir em-density (--geom G | --spef S) --lef TECH.lef
-                         [--current-map C | --net-current mA] [--fail-on-violation]
+  vyges loom em-ir run   JOB [-o OUT] [--json] [--fail-on-violation]
+  vyges loom em-ir check JOB
+  vyges loom em-ir demo  [-o OUT] [--json]
+  vyges loom em-ir em-density (--geom G | --spef S) --lef TECH.lef
+                              [--current-map C | --net-current mA] [--fail-on-violation]
 
 em-density is EM sign-off on *extracted SPEF*: it screens each metal segment's
 current density (from the loom EM geom sidecar: layer + width) against the tech
