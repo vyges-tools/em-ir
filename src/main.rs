@@ -14,6 +14,27 @@ use vyges_em_ir::emir::EmIrReport;
 use vyges_em_ir::engine;
 use vyges_em_ir::job::EmIrJob;
 
+/// A diagnostic as a structured event (`EMIR-ERROR`, or `EMIR-WARNING` for a warning; `vyges-events/1.0`)
+/// instead of a bare stderr line; text after a blank line (the usage) stays plain help.
+fn diag_line(msg: String) {
+    let (head, help) = match msg.split_once("\n\n") {
+        Some((h, rest)) => (h.to_string(), Some(rest.to_string())),
+        None => (msg, None),
+    };
+    let warn = head.starts_with("warning: ");
+    let text = head.strip_prefix("error: ").or_else(|| head.strip_prefix("warning: ")).unwrap_or(&head).to_string();
+    let (severity, code) = if warn { (vyges_events::Severity::Warn, "EMIR-WARNING") } else { (vyges_events::Severity::Error, "EMIR-ERROR") };
+    vyges_events::emit(&vyges_events::Event::new("vyges-em-ir", severity, text).with_code(code));
+    if let Some(h) = help {
+        eprintln!("{h}");
+    }
+}
+
+macro_rules! diag {
+    ($($t:tt)*) => { diag_line(format!($($t)*)) };
+}
+
+
 const USAGE: &str = "\
 vyges loom em-ir — EM / IR-drop power-integrity sign-off (PDN -> report)
 
@@ -173,7 +194,7 @@ fn write_out(text: &str, cli: &Cli) {
                 }
             }
             Err(e) => {
-                eprintln!("error: {path}: {e}");
+                diag!("error: {path}: {e}");
                 exit(1);
             }
         },
@@ -385,7 +406,7 @@ fn main() {
                     j.design, j.pdn, j.ir_limit_pct
                 ),
                 Err(e) => {
-                    eprintln!("error: {e}");
+                    diag!("error: {e}");
                     exit(2);
                 }
             }
@@ -398,7 +419,7 @@ fn main() {
             let job = match EmIrJob::load(path) {
                 Ok(j) => j,
                 Err(e) => {
-                    eprintln!("error: {e}");
+                    diag!("error: {e}");
                     exit(2);
                 }
             };
@@ -408,7 +429,7 @@ fn main() {
             match engine::analyze_job(&job) {
                 Ok(rep) => emit(&job, &rep, &cli),
                 Err(e) => {
-                    eprintln!("error: {e}");
+                    diag!("error: {e}");
                     exit(1);
                 }
             }
@@ -445,21 +466,21 @@ fn em_density(cli: &Cli) -> ! {
         exit(2);
     };
     let Some(lef_path) = cli.lef.clone() else {
-        eprintln!("error: em-density needs a tech LEF with DCCURRENTDENSITY (--lef PATH)");
+        diag!("error: em-density needs a tech LEF with DCCURRENTDENSITY (--lef PATH)");
         exit(2);
     };
 
     let geom = match EmGeom::load(&geom_path) {
         Ok(g) => g,
         Err(e) => {
-            eprintln!("error: {e}");
+            diag!("error: {e}");
             exit(2);
         }
     };
     let lef = match TechLef::load(&lef_path) {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("error: {lef_path}: {e}");
+            diag!("error: {lef_path}: {e}");
             exit(2);
         }
     };
@@ -467,7 +488,7 @@ fn em_density(cli: &Cli) -> ! {
         Some(p) => match CurrentMap::load(p) {
             Ok(c) => c,
             Err(e) => {
-                eprintln!("error: {p}: {e}");
+                diag!("error: {p}: {e}");
                 exit(2);
             }
         },
