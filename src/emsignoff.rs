@@ -117,7 +117,7 @@ pub fn screen(geom: &EmGeom, lef: &Lef, cur: &CurrentMap) -> EmIrReport {
             .avg
             .get(&seg.net)
             .copied()
-            .or({ (cur.default_avg_ma > 0.0).then_some(cur.default_avg_ma) });
+            .or((cur.default_avg_ma > 0.0).then_some(cur.default_avg_ma));
         let dc_checked = check("dc", seg, layer.dc_jmax, net_avg, &mut viols, &mut worst);
         // AC screens only when the net has an RMS/peak current supplied
         check(

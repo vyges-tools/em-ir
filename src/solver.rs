@@ -114,7 +114,7 @@ impl LinSys {
             let pap: f64 = (0..n).map(|k| p[k] * ap[k]).sum();
             // A is SPD, so pAp > 0 for p ≠ 0. A non-positive value means the matrix is not
             // what this solver assumes — report it rather than dividing and returning noise.
-            if !(pap > 0.0) {
+            if pap.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {  // NaN included
                 return Err(SolveError::NotConverged(self.worst_correction(&r)));
             }
             let alpha = rz / pap;

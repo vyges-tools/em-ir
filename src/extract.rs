@@ -427,7 +427,7 @@ pub fn extract(def: &Def, lef: &TechLef, job: &EmIrJob) -> Result<PdnSpec, Strin
             .min_by_key(|(_, x, y)| (x - cx) * (x - cx) + (y - cy) * (y - cy))
             .map(|(n, _, _)| n.clone())
     };
-    let mut tap_node = |c: &crate::def::Comp, untapped: &mut usize| -> Option<String> {
+    let tap_node = |c: &crate::def::Comp, untapped: &mut usize| -> Option<String> {
         match taps.get(&c.name) {
             Some(&(tx, ty)) => Some(node(&rail, tx, ty)),
             None => {
