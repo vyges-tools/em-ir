@@ -22,9 +22,10 @@ emlimit met4 0.3
 pub fn analyze_job(job: &EmIrJob) -> Result<EmIrReport, EmIrError> {
     let spec = if !job.def.is_empty() {
         // extract the PDN network from DEF power-grid geometry + LEF resistances
-        let def = crate::def::Def::load(&job.resolve(&job.def))
-            .map_err(|e| EmIrError::Parse(e.to_string()))?;
+        // the LEF first: a strap continues on a via's other layer, and the LEF says which
         let lef = crate::lef::TechLef::load(&job.resolve(&job.lef))
+            .map_err(|e| EmIrError::Parse(e.to_string()))?;
+        let def = crate::def::Def::load_with(&job.resolve(&job.def), &lef)
             .map_err(|e| EmIrError::Parse(e.to_string()))?;
         crate::extract::extract(&def, &lef, job).map_err(EmIrError::Parse)?
     } else {
