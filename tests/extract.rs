@@ -402,7 +402,11 @@ fn wide_job(cell_lef: String) -> EmIrJob {
     j.total_current = 0.0;
     j.cell_lef = cell_lef;
     j.current_map = {
-        let p = std::env::temp_dir().join("emir_wide_cur.map");
+        // One file per call: tests run in parallel, and one rewriting a shared name while another
+        // reads it handed the reader an empty map (no loads) — a failure that came and went.
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let k = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let p = std::env::temp_dir().join(format!("emir_wide_cur_{}_{k}.map", std::process::id()));
         std::fs::write(&p, "g1 1.0e-3\n").unwrap();
         p.to_string_lossy().into_owned()
     };
