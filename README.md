@@ -10,7 +10,7 @@ power-integrity report out.
 
 **Docs:** [docs.vyges.com](https://docs.vyges.com) — this engine's chapter, the
 [cross-engine integration guide](https://docs.vyges.com/engines/integration.html) (how the four
-Vyges engines work together and where each plugs into an OpenROAD / LibreLane flow), and the
+Vyges engines work together and where each plugs into an open-source flow such as LibreLane), and the
 job-file formats. **Integrating at the binary level and need help?** → <https://vyges.com/contact>.
 
 ## Why this exists
@@ -25,7 +25,7 @@ which shortens the chip's life. Power sign-off proves both are within budget.
 
 In production, power sign-off is done with **the commercial IR/EM sign-off tools** —
 static and dynamic IR, EM rules, electrothermal — gated behind major licenses.
-The open baseline is **PDNSim** (in OpenROAD), which does static IR and reports
+The open-source static IR baseline does static IR and reports
 per-segment current. `vyges-em-ir` is an open engine in that space, behind a plain
 resistor-network file format.
 
