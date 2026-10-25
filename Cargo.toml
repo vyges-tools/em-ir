@@ -10,6 +10,11 @@ repository = "https://github.com/vyges-tools/em-ir"
 
 # Shared readers come from the vyges-loom foundation — sibling-checkout path dep
 # in dev; release pins git/version. Structured findings via vyges-events (stderr).
+[features]
+# The command-line entry built into the library too (`cli_main`), for the suite binaries
+# that link every engine and run the one they are invoked as.
+suite = []
+
 [dependencies]
 vyges-loom = { git = "https://github.com/vyges-tools/loom", branch = "main" }
 vyges-events = { git = "https://github.com/vyges-tools/events", branch = "main", default-features = false }

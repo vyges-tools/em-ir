@@ -22,6 +22,10 @@
 // DEF reader now comes from the shared vyges-loom foundation. loom's Def is a
 // superset; the power view em-ir uses (power_net()/dbu/comps, NetGeom/Seg/Comp)
 // is unchanged.
+
+// The crate's own name inside it: the command-line entry ([`cli_main`]) is built into the
+// library too, and its `vyges_em_ir::…` paths resolve here.
+extern crate self as vyges_em_ir;
 pub use vyges_loom::def;
 pub mod emir;
 pub mod engine;
@@ -44,3 +48,10 @@ pub mod emsignoff;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const COPYRIGHT: &str = "© 2026 Vyges. All Rights Reserved.  https://vyges.com";
+
+/// The `vyges-em-ir` command-line entry (the binary's `main`), built into the library too so a
+/// suite binary can link every engine and run the one it is invoked as.
+#[cfg(feature = "suite")]
+#[doc(hidden)]
+#[path = "main.rs"]
+pub mod cli_main;
