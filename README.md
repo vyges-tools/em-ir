@@ -1,5 +1,7 @@
 # vyges-em-ir
 
+**[Download Loom](https://vyges.com/products/vyges-cli/#install)** · install the free [Vyges CLI](https://vyges.com/products/vyges-cli/), then `vyges install loom`
+
 **EM / IR-drop power-integrity sign-off**: a power-grid resistor network in, a
 power-integrity report out.
 
